@@ -9,6 +9,10 @@ import {
   storeDirectoryHandle,
   type MirrorConnectionHealth
 } from '../filesystem/connection';
+import {
+  MIRROR_RUNTIME_STATUS_KEY,
+  type MirrorRuntimeStatus
+} from '../filesystem/status';
 
 const sidebar = document.querySelector<HTMLElement>('.sidebar');
 if (!sidebar) throw new Error('Missing Library sidebar for filesystem connection controls');
@@ -23,6 +27,9 @@ style.textContent = `
   .mirror-dot.permission-needed { background: #b26a00; }
   .mirror-dot.denied, .mirror-dot.error { background: var(--error); }
   .mirror-folder { margin-top: 5px; font-weight: 650; color: var(--on-surface); overflow-wrap: anywhere; }
+  .mirror-runtime { margin-top: 8px; padding: 8px 9px; border-radius: 10px; background: var(--surface-container); font-size: 10px; line-height: 1.4; color: var(--on-surface-variant); overflow-wrap: anywhere; }
+  .mirror-runtime.degraded, .mirror-runtime.permission-needed { background: #fff3d6; color: #6b4d00; }
+  .mirror-runtime.denied, .mirror-runtime.error { background: color-mix(in srgb, var(--error) 10%, var(--surface)); color: var(--error); }
   .mirror-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .mirror-button { min-height: 32px; border: 1px solid var(--outline); border-radius: 18px; padding: 0 10px; background: var(--surface); color: var(--on-surface); cursor: pointer; font: inherit; font-size: 11px; font-weight: 650; }
   .mirror-button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
@@ -52,6 +59,10 @@ const folder = document.createElement('div');
 folder.className = 'mirror-folder';
 folder.hidden = true;
 
+const runtime = document.createElement('div');
+runtime.className = 'mirror-runtime';
+runtime.setAttribute('aria-live', 'polite');
+
 const actions = document.createElement('div');
 actions.className = 'mirror-actions';
 const primary = document.createElement('button');
@@ -69,9 +80,9 @@ actions.append(primary, chooseAnother, disconnect);
 
 const note = document.createElement('p');
 note.className = 'mirror-note';
-note.textContent = 'Optional mirror only. Your browser archive remains canonical. File writing is enabled in a later roadmap step.';
+note.textContent = 'Optional Markdown mirror. Your browser IndexedDB archive remains canonical; mirror failures never stop local capture.';
 
-card.append(title, healthRow, folder, actions, note);
+card.append(title, healthRow, folder, runtime, actions, note);
 sidebar.append(card);
 
 const dbPromise = openMirrorSettingsDb();
@@ -81,6 +92,7 @@ let health: MirrorConnectionHealth = {
   folderName: null,
   detail: null
 };
+let runtimeStatus: MirrorRuntimeStatus | null = null;
 let busy = false;
 
 function healthLabel(value: MirrorConnectionHealth): string {
@@ -100,11 +112,36 @@ function healthLabel(value: MirrorConnectionHealth): string {
   }
 }
 
+function runtimeLabel(value: MirrorRuntimeStatus | null): string {
+  if (!value) {
+    return currentHandle
+      ? 'No automatic mirror write has been recorded yet.'
+      : 'Automatic mirroring is idle until a folder is connected.';
+  }
+  const date = new Date(value.updatedAt);
+  const when = Number.isNaN(date.getTime()) ? value.updatedAt : date.toLocaleString();
+  switch (value.state) {
+    case 'healthy':
+      return `Last mirrored ${when}${value.path ? ` · ${value.path}` : ''}`;
+    case 'degraded':
+      return `Mirror updated with a cleanup warning · ${value.detail ?? when}`;
+    case 'permission-needed':
+    case 'denied':
+      return value.detail ?? 'Mirror write permission is unavailable.';
+    case 'error':
+      return `Mirror write failed · ${value.detail ?? when}`;
+    case 'disconnected':
+      return 'Automatic mirroring is idle because no folder is connected.';
+  }
+}
+
 function render(): void {
   dot.className = `mirror-dot ${health.state}`;
   healthText.textContent = healthLabel(health);
   folder.hidden = !health.folderName;
   folder.textContent = health.folderName ? `Folder: ${health.folderName}` : '';
+  runtime.className = `mirror-runtime${runtimeStatus ? ` ${runtimeStatus.state}` : ''}`;
+  runtime.textContent = runtimeLabel(runtimeStatus);
 
   const supported = health.state !== 'unsupported';
   const hasHandle = Boolean(currentHandle);
@@ -124,9 +161,13 @@ function render(): void {
 
 async function refresh(): Promise<void> {
   try {
-    const db = await dbPromise;
+    const [db, stored] = await Promise.all([
+      dbPromise,
+      chrome.storage.local.get(MIRROR_RUNTIME_STATUS_KEY)
+    ]);
     currentHandle = await getStoredDirectoryHandle(db);
     health = await queryDirectoryHealth(currentHandle);
+    runtimeStatus = (stored[MIRROR_RUNTIME_STATUS_KEY] as MirrorRuntimeStatus | undefined) ?? null;
   } catch (error) {
     health = {
       state: 'error',
@@ -203,8 +244,10 @@ disconnect.addEventListener('click', () => {
   render();
   void dbPromise
     .then((db) => clearStoredDirectoryHandle(db))
+    .then(() => chrome.storage.local.remove(MIRROR_RUNTIME_STATUS_KEY))
     .then(() => {
       currentHandle = null;
+      runtimeStatus = null;
       health = { state: 'disconnected', folderName: null, detail: null };
     })
     .catch((error: unknown) => {
@@ -218,6 +261,14 @@ disconnect.addEventListener('click', () => {
       busy = false;
       render();
     });
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local') return;
+  const change = changes[MIRROR_RUNTIME_STATUS_KEY];
+  if (!change) return;
+  runtimeStatus = (change.newValue as MirrorRuntimeStatus | undefined) ?? null;
+  render();
 });
 
 render();
