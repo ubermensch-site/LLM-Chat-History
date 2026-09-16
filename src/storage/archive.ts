@@ -1,11 +1,13 @@
 import type {
   ContentToBackgroundMessage,
+  CreateCheckpointMessage,
   ProviderConversationIdentity,
   ProviderTurnObservation,
   RecorderCommandMessage,
   RecorderState
 } from '../shared/types';
 import { recorderEventTypeForCommand, transitionRecorderState } from '../recorder/state-machine';
+import { createCheckpoint as persistCheckpoint } from './checkpoints';
 import { requestToPromise, transactionDone } from './db';
 import {
   messageId,
@@ -426,6 +428,24 @@ export class ArchiveRepository {
     );
     await transactionDone(transaction);
     return next;
+  }
+
+  async createCheckpoint(message: CreateCheckpointMessage): Promise<RecorderState> {
+    const resolution = await this.resolveConversation({
+      identity: message.identity,
+      sourceSessionId: message.sourceSessionId,
+      observedAt: message.observedAt
+    });
+    await this.recordResolutionEvents(resolution, message.observedAt);
+    await persistCheckpoint(
+      this.db,
+      resolution.conversation.id,
+      message.name,
+      message.note,
+      message.observedAt,
+      `checkpoint:${encodeURIComponent(message.requestId)}`
+    );
+    return resolution.conversation.recordingState;
   }
 
   async listConversations(): Promise<ArchiveConversation[]> {
