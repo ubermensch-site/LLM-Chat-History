@@ -200,6 +200,7 @@ export function buildLiveQaReport(input: {
       conversationFound: Boolean(input.archive.conversationFound),
       messageCount: Math.max(0, Math.floor(input.archive.messageCount)),
       eventCount: Math.max(0, Math.floor(input.archive.eventCount)),
+      visibleActivityCount: Math.max(0, Math.floor(input.archive.visibleActivityCount)),
       recordingState: input.archive.recordingState
     },
     privacy: {
