@@ -198,15 +198,20 @@ export class ChatGptAdapter implements ProviderAdapter {
     const emitSnapshot = () => {
       if (stopped) return;
       const identity = this.getConversationIdentity();
+      const observedAt = isoNow();
       if (identity) {
         callback({
           type: 'conversation',
           identity,
           title: this.getConversationTitle(),
-          observedAt: isoNow()
+          observedAt
         });
       }
-      this.scanRenderedTurns().forEach((turn) => callback({ type: 'turn-upsert', turn }));
+      callback({
+        type: 'turn-snapshot',
+        turns: this.scanRenderedTurns(),
+        observedAt
+      });
       callback({ type: 'health', health: this.getHealth() });
     };
 
