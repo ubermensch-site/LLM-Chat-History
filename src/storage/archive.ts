@@ -1,8 +1,11 @@
 import type {
   ContentToBackgroundMessage,
   ProviderConversationIdentity,
-  ProviderTurnObservation
+  ProviderTurnObservation,
+  RecorderCommandMessage,
+  RecorderState
 } from '../shared/types';
+import { recorderEventTypeForCommand, transitionRecorderState } from '../recorder/state-machine';
 import { requestToPromise, transactionDone } from './db';
 import {
   messageId,
@@ -38,15 +41,14 @@ function archiveEvent(
   conversationId: string | null,
   type: ArchiveEventType,
   createdAt: string,
-  data: ArchiveEvent['data'] = {}
+  data: ArchiveEvent['data'] = {},
+  id: string = crypto.randomUUID()
 ): ArchiveEvent {
-  return {
-    id: crypto.randomUUID(),
-    conversationId,
-    type,
-    createdAt,
-    data
-  };
+  return { id, conversationId, type, createdAt, data };
+}
+
+function suppressedTurnEventId(conversationId: string, providerTurnId: string): string {
+  return `suppressed:${conversationId}:${encodeURIComponent(providerTurnId)}`;
 }
 
 export class ArchiveRepository {
@@ -99,7 +101,9 @@ export class ArchiveRepository {
         sourceUrl: input.identity.sourceUrl || existing.sourceUrl,
         title: input.title === undefined ? existing.title : input.title,
         updatedAt: now,
-        lastObservedAt: now
+        lastObservedAt: now,
+        recordingState: existing.recordingState ?? 'recording',
+        recordingStateUpdatedAt: existing.recordingStateUpdatedAt ?? existing.createdAt
       };
 
       if (stableProviderKey) {
@@ -120,7 +124,9 @@ export class ArchiveRepository {
         createdAt: now,
         updatedAt: now,
         lastObservedAt: now,
-        messageCount: 0
+        messageCount: 0,
+        recordingState: 'recording',
+        recordingStateUpdatedAt: now
       };
 
       if (stableProviderKey) conversation.providerKey = stableProviderKey;
@@ -144,25 +150,19 @@ export class ArchiveRepository {
     await transactionDone(transaction);
   }
 
-  private async persistConversationObservation(message: ContentToBackgroundMessage): Promise<void> {
-    if (message.observation.type !== 'conversation') return;
-
-    const result = await this.resolveConversation({
-      identity: message.observation.identity,
-      sourceSessionId: message.sourceSessionId,
-      title: message.observation.title,
-      observedAt: message.observation.observedAt
-    });
-
+  private async recordResolutionEvents(
+    result: ConversationResolution,
+    observedAt: string
+  ): Promise<void> {
     if (result.created) {
       await this.appendEvent(
-        archiveEvent(result.conversation.id, 'conversation-created', message.observation.observedAt, {
+        archiveEvent(result.conversation.id, 'conversation-created', observedAt, {
           provisional: result.conversation.provisional
         })
       );
     } else if (result.identified) {
       await this.appendEvent(
-        archiveEvent(result.conversation.id, 'conversation-identified', message.observation.observedAt, {
+        archiveEvent(result.conversation.id, 'conversation-identified', observedAt, {
           providerConversationId: result.conversation.providerConversationId
         })
       );
@@ -170,14 +170,82 @@ export class ArchiveRepository {
 
     if (result.titleChanged) {
       await this.appendEvent(
-        archiveEvent(result.conversation.id, 'title-changed', message.observation.observedAt, {
+        archiveEvent(result.conversation.id, 'title-changed', observedAt, {
           title: result.conversation.title
         })
       );
     }
   }
 
-  private async persistTurn(message: ContentToBackgroundMessage, turn: ProviderTurnObservation): Promise<void> {
+  private async persistConversationObservation(
+    message: ContentToBackgroundMessage
+  ): Promise<RecorderState> {
+    if (message.observation.type !== 'conversation') {
+      throw new Error('Expected conversation observation');
+    }
+
+    const result = await this.resolveConversation({
+      identity: message.observation.identity,
+      sourceSessionId: message.sourceSessionId,
+      title: message.observation.title,
+      observedAt: message.observation.observedAt
+    });
+    await this.recordResolutionEvents(result, message.observation.observedAt);
+    return result.conversation.recordingState;
+  }
+
+  private async isTurnSuppressed(
+    conversationId: string,
+    providerTurnId: string
+  ): Promise<boolean> {
+    const transaction = this.db.transaction(STORES.events, 'readonly');
+    const event = await requestToPromise<ArchiveEvent | undefined>(
+      transaction.objectStore(STORES.events).get(
+        suppressedTurnEventId(conversationId, providerTurnId)
+      )
+    );
+    await transactionDone(transaction);
+    return Boolean(event);
+  }
+
+  private async suppressTurn(
+    conversation: ArchiveConversation,
+    turn: ProviderTurnObservation,
+    state: RecorderState
+  ): Promise<void> {
+    const id = messageId(conversation.id, turn.providerTurnId);
+    const contentHash = await sha256Hex(JSON.stringify([turn.role, turn.plainText, turn.markdown]));
+    const suppressionId = suppressedTurnEventId(conversation.id, turn.providerTurnId);
+
+    const readTransaction = this.db.transaction([STORES.messages, STORES.events], 'readonly');
+    const existing = await requestToPromise<ArchiveMessage | undefined>(
+      readTransaction.objectStore(STORES.messages).get(id)
+    );
+    const alreadySuppressed = await requestToPromise<ArchiveEvent | undefined>(
+      readTransaction.objectStore(STORES.events).get(suppressionId)
+    );
+    await transactionDone(readTransaction);
+
+    if (alreadySuppressed || existing?.contentHash === contentHash) return;
+
+    await this.appendEvent(
+      archiveEvent(
+        conversation.id,
+        'turn-suppressed',
+        turn.observedAt,
+        {
+          providerTurnId: turn.providerTurnId,
+          reason: state
+        },
+        suppressionId
+      )
+    );
+  }
+
+  private async persistTurn(
+    message: ContentToBackgroundMessage,
+    turn: ProviderTurnObservation
+  ): Promise<RecorderState> {
     const identity: ProviderConversationIdentity = {
       providerId: turn.providerId,
       providerConversationId: turn.providerConversationId,
@@ -190,11 +258,22 @@ export class ArchiveRepository {
       sourceSessionId: message.sourceSessionId,
       observedAt: turn.observedAt
     });
+    await this.recordResolutionEvents(resolution, turn.observedAt);
+
     const conversation = resolution.conversation;
+    const state = conversation.recordingState;
+
+    if (state !== 'recording') {
+      await this.suppressTurn(conversation, turn, state);
+      return state;
+    }
+
+    if (await this.isTurnSuppressed(conversation.id, turn.providerTurnId)) {
+      return state;
+    }
+
     const id = messageId(conversation.id, turn.providerTurnId);
-    const contentHash = await sha256Hex(
-      JSON.stringify([turn.role, turn.plainText, turn.markdown])
-    );
+    const contentHash = await sha256Hex(JSON.stringify([turn.role, turn.plainText, turn.markdown]));
 
     const transaction = this.db.transaction(
       [STORES.messages, STORES.conversations, STORES.events],
@@ -227,14 +306,12 @@ export class ArchiveRepository {
     };
 
     messages.put(record);
-
-    const latestConversation: ArchiveConversation = {
+    conversations.put({
       ...conversation,
       updatedAt: turn.observedAt,
       lastObservedAt: turn.observedAt,
       messageCount: conversation.messageCount + (isNew ? 1 : 0)
-    };
-    conversations.put(latestConversation);
+    } satisfies ArchiveConversation);
 
     if (isNew) {
       events.put(
@@ -263,6 +340,7 @@ export class ArchiveRepository {
     }
 
     await transactionDone(transaction);
+    return state;
   }
 
   private async persistHealth(message: ContentToBackgroundMessage): Promise<void> {
@@ -277,17 +355,47 @@ export class ArchiveRepository {
     );
   }
 
-  async persistObservation(message: ContentToBackgroundMessage): Promise<void> {
+  async persistObservation(message: ContentToBackgroundMessage): Promise<RecorderState | null> {
     switch (message.observation.type) {
       case 'conversation':
-        await this.persistConversationObservation(message);
-        return;
+        return this.persistConversationObservation(message);
       case 'turn-upsert':
-        await this.persistTurn(message, message.observation.turn);
-        return;
+        return this.persistTurn(message, message.observation.turn);
       case 'health':
         await this.persistHealth(message);
+        return null;
     }
+  }
+
+  async applyRecorderCommand(message: RecorderCommandMessage): Promise<RecorderState> {
+    const resolution = await this.resolveConversation({
+      identity: message.identity,
+      sourceSessionId: message.sourceSessionId,
+      observedAt: message.observedAt
+    });
+    await this.recordResolutionEvents(resolution, message.observedAt);
+
+    const current = resolution.conversation.recordingState;
+    const next = transitionRecorderState(current, message.command);
+    const updated: ArchiveConversation = {
+      ...resolution.conversation,
+      recordingState: next,
+      recordingStateUpdatedAt: message.observedAt,
+      updatedAt: message.observedAt,
+      lastObservedAt: message.observedAt
+    };
+
+    const transaction = this.db.transaction([STORES.conversations, STORES.events], 'readwrite');
+    transaction.objectStore(STORES.conversations).put(updated);
+    transaction.objectStore(STORES.events).put(
+      archiveEvent(updated.id, recorderEventTypeForCommand(message.command), message.observedAt, {
+        from: current,
+        to: next,
+        command: message.command
+      })
+    );
+    await transactionDone(transaction);
+    return next;
   }
 
   async listConversations(): Promise<ArchiveConversation[]> {
@@ -301,9 +409,7 @@ export class ArchiveRepository {
 
   async listMessages(conversationId: string): Promise<ArchiveMessage[]> {
     const transaction = this.db.transaction(STORES.messages, 'readonly');
-    const index = transaction
-      .objectStore(STORES.messages)
-      .index(INDEXES.messages.conversationOrder);
+    const index = transaction.objectStore(STORES.messages).index(INDEXES.messages.conversationOrder);
     const range = IDBKeyRange.bound(
       [conversationId, 0],
       [conversationId, Number.MAX_SAFE_INTEGER]
