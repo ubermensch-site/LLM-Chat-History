@@ -80,7 +80,9 @@ function mergedConversation(
     delete result.provisionalKey;
   } else {
     delete result.providerKey;
-    result.provisionalKey = existing.provisionalKey ?? imported.provisionalKey;
+    const provisionalKey = existing.provisionalKey ?? imported.provisionalKey;
+    if (provisionalKey) result.provisionalKey = provisionalKey;
+    else delete result.provisionalKey;
   }
   return result;
 }
