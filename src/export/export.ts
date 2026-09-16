@@ -44,6 +44,17 @@ function stateEventLabel(event: ArchiveEvent): string | null {
   }
 }
 
+function checkpointData(event: ArchiveEvent): { name: string; note: string | null } | null {
+  if (event.type !== 'checkpoint') return null;
+  const name = event.data.name;
+  const note = event.data.note;
+  if (typeof name !== 'string' || !name.trim()) return null;
+  return {
+    name: name.trim(),
+    note: typeof note === 'string' && note.trim() ? note.trim() : null
+  };
+}
+
 export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
   const { conversation, messages, events, exportedAt } = bundle;
   const title = escapeMetadata(conversationDisplayTitle(conversation));
@@ -70,6 +81,7 @@ export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
   const timeline: Array<
     | { kind: 'message'; at: string; order: number; message: ArchiveMessage }
     | { kind: 'state'; at: string; order: number; label: string }
+    | { kind: 'checkpoint'; at: string; order: number; name: string; note: string | null }
   > = [];
 
   for (const message of messages) {
@@ -82,6 +94,17 @@ export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
   }
 
   for (const event of events) {
+    const checkpoint = checkpointData(event);
+    if (checkpoint) {
+      timeline.push({
+        kind: 'checkpoint',
+        at: event.createdAt,
+        order: 4,
+        name: checkpoint.name,
+        note: checkpoint.note
+      });
+      continue;
+    }
     const label = stateEventLabel(event);
     if (!label) continue;
     timeline.push({ kind: 'state', at: event.createdAt, order: 0, label });
@@ -92,6 +115,12 @@ export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
   for (const item of timeline) {
     if (item.kind === 'state') {
       lines.push(`> **${item.label}** — ${item.at}`, '', '---', '');
+      continue;
+    }
+    if (item.kind === 'checkpoint') {
+      lines.push(`> **Checkpoint — ${item.name}** — ${item.at}`);
+      if (item.note) lines.push('>', `> ${item.note.replace(/\r?\n/g, '\n> ')}`);
+      lines.push('', '---', '');
       continue;
     }
 
