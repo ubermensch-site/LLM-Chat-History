@@ -33,3 +33,14 @@ jobs:
 
       - name: Build extension
         run: npm run build
+
+      - name: Verify extension bundle
+        run: npm run verify:dist
+
+      - name: Upload unpacked extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-chat-history-unpacked-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
