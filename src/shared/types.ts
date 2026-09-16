@@ -21,6 +21,8 @@ export interface ProviderTurnObservation {
   plainText: string;
   markdown: string | null;
   partial: boolean;
+  /** Visible provider UI label only. Never inferred from hidden page data. */
+  modelLabel?: string | null;
   observedAt: string;
 }
 
