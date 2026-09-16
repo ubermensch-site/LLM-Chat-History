@@ -15,10 +15,14 @@ describe('recorder state machine', () => {
     expect(transitionRecorderState('error', 'stop')).toBe('stopped');
   });
 
-  it('rejects invalid transitions instead of guessing intent', () => {
-    expect(() => transitionRecorderState('recording', 'resume')).toThrow(
-      RecorderStateTransitionError
-    );
+  it('treats repeated same-intent commands as idempotent no-ops', () => {
+    expect(transitionRecorderState('recording', 'resume')).toBe('recording');
+    expect(transitionRecorderState('recording', 'start')).toBe('recording');
+    expect(transitionRecorderState('paused', 'pause')).toBe('paused');
+    expect(transitionRecorderState('stopped', 'stop')).toBe('stopped');
+  });
+
+  it('still rejects contradictory transitions instead of guessing intent', () => {
     expect(() => transitionRecorderState('paused', 'start')).toThrow(
       RecorderStateTransitionError
     );
