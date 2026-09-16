@@ -63,6 +63,13 @@ function maxScrollTop(state: HarvestViewportState): number {
   return Math.max(0, state.scrollHeight - state.clientHeight);
 }
 
+function traversalStep(state: HarvestViewportState, stepRatio: number): number {
+  // Never advance by a full viewport or more. The overlap is intentional: a
+  // virtualized provider can replace most/all DOM nodes between scroll steps,
+  // and overlapping windows are what let the archive reconcile ordering safely.
+  return Math.max(1, state.clientHeight * stepRatio);
+}
+
 export async function runHistoricalScrollHarvest(
   options: HistoricalHarvestOptions
 ): Promise<HistoricalHarvestResult> {
@@ -114,7 +121,7 @@ export async function runHistoricalScrollHarvest(
     while (!truncated && !reachedTop) {
       const state = normalizedState(options.viewport);
       if (state.scrollTop > epsilon) {
-        const step = Math.max(240, state.clientHeight * stepRatio);
+        const step = traversalStep(state, stepRatio);
         options.viewport.scrollTo(Math.max(0, state.scrollTop - step));
         await options.settle();
         await capture('up');
@@ -146,7 +153,7 @@ export async function runHistoricalScrollHarvest(
       const state = normalizedState(options.viewport);
       const maxTop = maxScrollTop(state);
       if (state.scrollTop < maxTop - epsilon) {
-        const step = Math.max(240, state.clientHeight * stepRatio);
+        const step = traversalStep(state, stepRatio);
         options.viewport.scrollTo(Math.min(maxTop, state.scrollTop + step));
         await options.settle();
         await capture('down');
