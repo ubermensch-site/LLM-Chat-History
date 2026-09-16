@@ -65,6 +65,11 @@ function optionalString(value: unknown, path: string): string | undefined {
   return stringValue(value, path);
 }
 
+function optionalNullableString(value: unknown, path: string): string | null | undefined {
+  if (value === undefined) return undefined;
+  return nullableString(value, path);
+}
+
 function booleanValue(value: unknown, path: string): boolean {
   if (typeof value !== 'boolean') fail(path, 'expected a boolean');
   return value;
@@ -254,6 +259,9 @@ function parseMessage(
     lastObservedAt: timestamp(input.lastObservedAt, `${path}.lastObservedAt`),
     updatedAt: timestamp(input.updatedAt, `${path}.updatedAt`)
   };
+
+  const modelLabel = optionalNullableString(input.modelLabel, `${path}.modelLabel`);
+  if (modelLabel !== undefined) message.modelLabel = modelLabel;
 
   if (message.conversationId !== conversation.id) {
     fail(`${path}.conversationId`, 'does not match exported conversation');
