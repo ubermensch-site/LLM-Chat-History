@@ -129,6 +129,8 @@ export interface LiveQaArchiveStatus {
   conversationFound: boolean;
   messageCount: number;
   eventCount: number;
+  /** Count only; never contains visible activity text. */
+  visibleActivityCount: number;
   recordingState: RecorderState | null;
 }
 
