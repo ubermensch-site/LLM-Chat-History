@@ -1,4 +1,5 @@
 import { ChatGptAdapter } from '../providers/chatgpt/adapter';
+import { recordPerformanceSample } from '../performance/metrics';
 import type {
   BackgroundAck,
   BackgroundToContentMessage,
@@ -18,6 +19,8 @@ const sourceSessionId = crypto.randomUUID();
 let renderedTurnIds = new Set<string>();
 let activeConversationKey: string | null = null;
 let sendQueue: Promise<unknown> = Promise.resolve();
+let snapshotProfileStartedAt: number | null = null;
+let snapshotRenderedTurnCount = 0;
 
 const pill = mountRecorderPill({
   onCommand: (command) => sendRecorderCommand(command),
@@ -118,20 +121,39 @@ async function sendCheckpoint(name: string, note: string | null): Promise<void> 
   }
 }
 
+function recordSnapshotProfile(): void {
+  if (snapshotProfileStartedAt === null) return;
+  const durationMs = performance.now() - snapshotProfileStartedAt;
+  snapshotProfileStartedAt = null;
+  const sample = {
+    metric: 'adapter-snapshot-ms' as const,
+    durationMs,
+    at: new Date().toISOString(),
+    itemCount: snapshotRenderedTurnCount
+  };
+  void recordPerformanceSample(chrome.storage.local, sample).catch((error: unknown) => {
+    console.debug('[LLM Chat History] performance sample unavailable', error);
+  });
+}
+
 function enqueueObservation(observation: ProviderObservation): void {
   if (observation.type === 'turn-upsert') {
     renderedTurnIds.add(observation.turn.providerTurnId);
     pill.update({ turnCount: renderedTurnIds.size });
   } else if (observation.type === 'turn-snapshot') {
+    snapshotRenderedTurnCount = observation.turns.length;
     for (const turn of observation.turns) renderedTurnIds.add(turn.providerTurnId);
     pill.update({ turnCount: renderedTurnIds.size });
   } else if (observation.type === 'health') {
+    recordSnapshotProfile();
     pill.update({
       health: observation.health.state,
       healthCode: observation.health.code,
       healthDetail: observation.health.detail ?? null
     });
   } else if (observation.type === 'conversation') {
+    snapshotProfileStartedAt = performance.now();
+    snapshotRenderedTurnCount = 0;
     const nextKey = observationConversationKey(observation);
     if (nextKey !== activeConversationKey) {
       activeConversationKey = nextKey;
