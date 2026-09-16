@@ -2,6 +2,7 @@ import { ChatGptAdapter } from '../providers/chatgpt/adapter';
 import type {
   BackgroundAck,
   ContentToBackgroundMessage,
+  OpenLibraryMessage,
   ProviderObservation,
   RecorderCommand,
   RecorderCommandMessage
@@ -16,7 +17,8 @@ let activeConversationKey: string | null = null;
 let sendQueue: Promise<unknown> = Promise.resolve();
 
 const pill = mountRecorderPill({
-  onCommand: (command) => sendRecorderCommand(command)
+  onCommand: (command) => sendRecorderCommand(command),
+  onOpenLibrary: () => openLibrary()
 });
 
 function observationConversationKey(observation: ProviderObservation): string | null {
@@ -30,6 +32,12 @@ function applyAck(ack: BackgroundAck | undefined): void {
   if (!ack) return;
   if (!ack.ok) throw new Error(ack.error ?? 'Background persistence failed');
   if (ack.recordingState) pill.update({ recordingState: ack.recordingState });
+}
+
+async function openLibrary(): Promise<void> {
+  const message: OpenLibraryMessage = { type: 'LLMCH_OPEN_LIBRARY' };
+  const ack = (await chrome.runtime.sendMessage(message)) as BackgroundAck | undefined;
+  if (ack && !ack.ok) throw new Error(ack.error ?? 'Unable to open archive library');
 }
 
 async function sendRecorderCommand(command: RecorderCommand): Promise<void> {
