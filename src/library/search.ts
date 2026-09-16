@@ -13,6 +13,14 @@ function normalized(value: string): string {
   return value.toLocaleLowerCase();
 }
 
+function messageSearchText(message: ArchiveMessage): string {
+  return [
+    message.plainText,
+    message.modelLabel ?? '',
+    ...(message.visibleActivities?.map((activity) => activity.text) ?? [])
+  ].join('\n');
+}
+
 export function matchesLibraryQuery(record: LibraryRecord, query: string): boolean {
   const needle = normalized(query.trim());
   if (!needle) return true;
@@ -35,7 +43,9 @@ export function matchesLibraryQuery(record: LibraryRecord, query: string): boole
     .toLocaleLowerCase();
 
   if (metadata.includes(needle)) return true;
-  if (record.messages.some((message) => normalized(message.plainText).includes(needle))) return true;
+  if (record.messages.some((message) => normalized(messageSearchText(message)).includes(needle))) {
+    return true;
+  }
   return (record.checkpoints ?? []).some((checkpoint) =>
     normalized(`${checkpoint.name}\n${checkpoint.note ?? ''}`).includes(needle)
   );
