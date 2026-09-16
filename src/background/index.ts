@@ -3,7 +3,8 @@ import type {
   ContentToBackgroundMessage,
   ContentToBackgroundRequest,
   OpenLibraryMessage,
-  RecorderCommandMessage
+  RecorderCommandMessage,
+  ShowRecorderMessage
 } from '../shared/types';
 import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
@@ -73,13 +74,26 @@ async function openLibrary(): Promise<void> {
   await chrome.tabs.create({ url: chrome.runtime.getURL('library.html') });
 }
 
+async function showRecorder(tabId: number): Promise<boolean> {
+  const message: ShowRecorderMessage = { type: 'LLMCH_SHOW_RECORDER' };
+  try {
+    const ack = (await chrome.tabs.sendMessage(tabId, message)) as BackgroundAck | undefined;
+    return Boolean(ack?.ok);
+  } catch {
+    return false;
+  }
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   console.info('[LLM Chat History] extension installed');
 });
 
-chrome.action.onClicked.addListener(() => {
-  void openLibrary().catch((error: unknown) => {
-    console.error('[LLM Chat History] unable to open archive library', error);
+chrome.action.onClicked.addListener((tab) => {
+  void (async () => {
+    if (typeof tab.id === 'number' && (await showRecorder(tab.id))) return;
+    await openLibrary();
+  })().catch((error: unknown) => {
+    console.error('[LLM Chat History] toolbar action failed', error);
   });
 });
 
@@ -104,13 +118,14 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       return repository.persistObservation(message);
     })
     .then(async (recordingState) => {
+      const persistedAt = new Date().toISOString();
       await chrome.storage.local.set({
-        lastPersistenceAt: new Date().toISOString(),
+        lastPersistenceAt: persistedAt,
         lastPersistenceError: null
       });
       const ack: BackgroundAck = recordingState
-        ? { ok: true, recordingState }
-        : { ok: true };
+        ? { ok: true, recordingState, persistedAt }
+        : { ok: true, persistedAt };
       sendResponse(ack);
     })
     .catch(async (error: unknown) => {
