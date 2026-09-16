@@ -57,5 +57,13 @@ export interface ProviderAdapter {
 
 export interface ContentToBackgroundMessage {
   type: 'LLMCH_PROVIDER_OBSERVATION';
+  providerId: ProviderId;
+  sourceSessionId: string;
+  pageUrl: string;
   observation: ProviderObservation;
+}
+
+export interface BackgroundAck {
+  ok: boolean;
+  error?: string;
 }
