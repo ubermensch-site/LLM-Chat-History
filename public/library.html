@@ -27,6 +27,9 @@
     .brand { font-size: 20px; font-weight: 700; margin: 0 8px 16px; }
     .search { width: 100%; min-height: 44px; border: 1px solid var(--outline); border-radius: 24px; padding: 0 16px; background: var(--surface); color: var(--on-surface); outline: none; }
     .search:focus { border: 2px solid var(--primary); }
+    .view-tabs { display: flex; gap: 6px; margin: 10px 2px 4px; }
+    .view-tab { flex: 1; min-height: 34px; border: 1px solid var(--outline-variant); border-radius: 18px; background: transparent; color: var(--on-surface-variant); cursor: pointer; font-weight: 600; }
+    .view-tab.selected { background: #e8def8; border-color: transparent; color: #1d192b; }
     .count { margin: 10px 10px 8px; font-size: 12px; color: var(--on-surface-variant); }
     .list { display: grid; gap: 6px; }
     .conversation { width: 100%; text-align: left; border: 0; border-radius: 14px; padding: 12px; background: transparent; color: inherit; cursor: pointer; }
@@ -39,14 +42,16 @@
     .heading { min-width: 0; }
     .heading h1 { margin: 0; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .heading p { margin: 4px 0 0; font-size: 12px; color: var(--on-surface-variant); }
-    .action-block { display: grid; justify-items: end; gap: 6px; max-width: min(520px, 55vw); }
+    .action-block { display: grid; justify-items: end; gap: 6px; max-width: min(720px, 65vw); }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .button { min-height: 38px; border: 1px solid var(--outline); border-radius: 20px; padding: 0 14px; background: var(--surface); color: var(--on-surface); cursor: pointer; font-weight: 600; }
     .button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
+    .button.danger { color: var(--error); border-color: color-mix(in srgb, var(--error) 65%, var(--outline)); }
+    .button.danger-armed { background: var(--error); border-color: var(--error); color: var(--on-primary); }
     .button:disabled { opacity: .45; cursor: default; }
-    .button:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 45%, transparent); outline-offset: 2px; }
-    .import-status { margin: 0; min-height: 16px; font-size: 11px; color: var(--on-surface-variant); text-align: right; line-height: 1.35; overflow-wrap: anywhere; }
-    .import-status.error { color: var(--error); }
+    .button:focus-visible, .view-tab:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 45%, transparent); outline-offset: 2px; }
+    .library-status { margin: 0; min-height: 16px; font-size: 11px; color: var(--on-surface-variant); text-align: right; line-height: 1.35; overflow-wrap: anywhere; }
+    .library-status.error { color: var(--error); }
     .visually-hidden { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
     .transcript { max-width: 900px; margin: 0 auto; padding: 24px; }
     .message { margin: 0 0 18px; padding: 16px; border-radius: 18px; background: var(--surface-container); }
@@ -56,7 +61,6 @@
     .content { margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; font-family: inherit; }
     .partial { margin-top: 8px; font-size: 11px; color: var(--on-surface-variant); }
     .empty { min-height: 55vh; display: grid; place-items: center; text-align: center; color: var(--on-surface-variant); padding: 24px; }
-    .state { text-transform: capitalize; }
     @media (prefers-color-scheme: dark) {
       :root {
         --primary: #d0bcff; --on-primary: #381e72; --surface: #141218;
@@ -64,15 +68,18 @@
         --on-surface: #e6e0e9; --on-surface-variant: #cac4d0;
         --outline: #938f99; --outline-variant: #49454f; --error: #f2b8b5;
       }
-      .conversation.selected { background: #4a4458; color: #e8def8; }
+      .conversation.selected, .view-tab.selected { background: #4a4458; color: #e8def8; }
+    }
+    @media (max-width: 900px) {
+      .topbar { flex-direction: column; }
+      .action-block { justify-items: start; max-width: 100%; }
+      .actions { justify-content: flex-start; }
+      .library-status { text-align: left; }
     }
     @media (max-width: 760px) {
       .app { grid-template-columns: 1fr; }
       .sidebar { border-right: 0; border-bottom: 1px solid var(--outline-variant); }
-      .topbar { position: static; flex-direction: column; }
-      .action-block { justify-items: start; max-width: 100%; }
-      .actions { justify-content: flex-start; }
-      .import-status { text-align: left; }
+      .topbar { position: static; }
     }
   </style>
 </head>
@@ -80,7 +87,11 @@
   <div class="app">
     <aside class="sidebar">
       <div class="brand">LLM Chat History</div>
-      <input id="search" class="search" type="search" placeholder="Search chats and messages…" autocomplete="off" aria-label="Search archived chats">
+      <input id="search" class="search" type="search" placeholder="Search chats and messages…" autocomplete="off" aria-label="Search local chats">
+      <div class="view-tabs" aria-label="Conversation status">
+        <button id="view-active" class="view-tab selected" type="button" aria-pressed="true">Active</button>
+        <button id="view-archived" class="view-tab" type="button" aria-pressed="false">Archived</button>
+      </div>
       <div id="count" class="count">Loading…</div>
       <div id="conversation-list" class="list" aria-live="polite"></div>
     </aside>
@@ -92,12 +103,15 @@
         </div>
         <div class="action-block">
           <div class="actions">
+            <button id="rename-chat" class="button" type="button" disabled>Rename</button>
+            <button id="archive-chat" class="button" type="button" disabled>Archive</button>
+            <button id="delete-chat" class="button danger" type="button" disabled>Delete</button>
             <button id="import-json" class="button" type="button" disabled>Import JSON</button>
             <button id="download-md" class="button primary" type="button" disabled>Download .md</button>
             <button id="download-json" class="button" type="button" disabled>Download JSON</button>
             <input id="import-file" class="visually-hidden" type="file" accept="application/json,.json" aria-label="Choose JSON archive backup">
           </div>
-          <p id="import-status" class="import-status" aria-live="polite"></p>
+          <p id="library-status" class="library-status" aria-live="polite"></p>
         </div>
       </header>
       <section id="transcript" class="transcript">
