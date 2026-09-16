@@ -18,6 +18,8 @@ import {
 } from './selectors';
 
 const isoNow = () => new Date().toISOString();
+const VISIBLE_GPT_MODEL = /^GPT[-\s]?\d[A-Za-z0-9.]*(?:\s+[A-Za-z0-9.+-]+){0,3}$/i;
+const VISIBLE_O_MODEL = /^(?:OpenAI\s+)?o\d[A-Za-z0-9.]*(?:-[A-Za-z0-9.]+)?(?:\s+[A-Za-z0-9.+-]+){0,2}$/i;
 
 export function parseChatGptConversationId(url: URL): string | null {
   const match = url.pathname.match(/\/c\/([^/?#]+)/);
@@ -33,9 +35,7 @@ export function normalizeVisibleModelLabel(value: string): string | null {
     .trim();
 
   if (!normalized || normalized.length > 80) return null;
-  return /^(?:GPT[-\s]?\d[\w.+\- ]*|ChatGPT[\w.+\- ]*|o\d[\w.+\- ]*|OpenAI\s+o\d[\w.+\- ]*)$/i.test(
-    normalized
-  )
+  return VISIBLE_GPT_MODEL.test(normalized) || VISIBLE_O_MODEL.test(normalized)
     ? normalized
     : null;
 }
