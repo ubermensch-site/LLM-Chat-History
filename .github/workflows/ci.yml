@@ -5,6 +5,9 @@ on:
     branches:
       - main
       - 'feat/**'
+      - 'release/**'
+      - 'review/**'
+      - 'test/**'
   pull_request:
 
 permissions:
@@ -37,6 +40,26 @@ jobs:
       - name: Verify extension bundle
         run: npm run verify:dist
 
+      - name: Package release ZIP
+        run: npm run package:release
+
+      - name: Verify release ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip_path="release/llm-chat-history-v$(node -p "require('./package.json').version").zip"
+          test -f "$zip_path"
+          test -f "$zip_path.sha256"
+          unzip -t "$zip_path"
+          unzip -Z1 "$zip_path" | sort > release/zip-contents.txt
+          ! grep -E '\.map$' release/zip-contents.txt
+          grep -Fx 'manifest.json' release/zip-contents.txt
+          grep -Fx 'background.js' release/zip-contents.txt
+          grep -Fx 'content.js' release/zip-contents.txt
+          grep -Fx 'library.js' release/zip-contents.txt
+          grep -Fx 'library.html' release/zip-contents.txt
+          (cd release && sha256sum -c "$(basename "$zip_path").sha256")
+
       - name: Upload unpacked extension
         uses: actions/upload-artifact@v4
         with:
@@ -44,3 +67,14 @@ jobs:
           path: dist/
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload release candidate package
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-chat-history-v0.1-release-${{ github.sha }}
+          path: |
+            release/*.zip
+            release/*.sha256
+            release/zip-contents.txt
+          if-no-files-found: error
+          retention-days: 30

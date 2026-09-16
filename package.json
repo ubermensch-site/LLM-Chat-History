@@ -1,6 +1,6 @@
 {
   "name": "llm-chat-history",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Local-first browser extension for recording and organizing LLM conversations.",
@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify:dist": "node scripts/verify-dist.mjs"
+    "verify:dist": "node scripts/verify-dist.mjs",
+    "package:release": "node scripts/package-release.mjs"
   },
   "devDependencies": {
     "@types/chrome": "0.3.0",

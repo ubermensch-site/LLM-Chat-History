@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "LLM Chat History",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Local-first recording and organization for LLM conversations.",
   "permissions": ["storage"],
   "host_permissions": [

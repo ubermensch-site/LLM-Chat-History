@@ -6,6 +6,7 @@ import type {
   ProviderTurnObservation,
   TurnRole
 } from '../../shared/types';
+import { renderDomAsMarkdown } from './dom-markdown';
 import { ChatGptHealthMonitor } from './health-monitor';
 import {
   ASSISTANT_CONTENT_SELECTORS,
@@ -135,7 +136,9 @@ export class ChatGptAdapter implements ProviderAdapter {
         providerMessageId ??
         element.getAttribute('data-testid') ??
         `dom:${role}:${index}`;
-      const plainText = normalizedText(contentNodeFor(element, role));
+      const contentNode = contentNodeFor(element, role);
+      const plainText = normalizedText(contentNode);
+      const renderedMarkdown = contentNode ? renderDomAsMarkdown(contentNode) : '';
 
       turns.push({
         providerId: this.providerId,
@@ -145,7 +148,7 @@ export class ChatGptAdapter implements ProviderAdapter {
         role,
         orderHint: index,
         plainText,
-        markdown: plainText || null,
+        markdown: renderedMarkdown || plainText || null,
         partial: role === 'assistant' && generating && index === lastAssistantIndex,
         observedAt: isoNow()
       });
