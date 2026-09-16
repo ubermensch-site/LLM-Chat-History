@@ -1,14 +1,13 @@
 import type { ProviderId, RecorderState, TurnRole } from '../shared/types';
 
 export const ARCHIVE_DB_NAME = 'llm-chat-history';
-export const ARCHIVE_DB_VERSION = 3;
+export const ARCHIVE_DB_VERSION = 2;
 
 export const STORES = {
   conversations: 'conversations',
   messages: 'messages',
   events: 'events',
-  projects: 'projects',
-  checkpoints: 'checkpoints'
+  projects: 'projects'
 } as const;
 
 export const INDEXES = {
@@ -28,9 +27,6 @@ export const INDEXES = {
   },
   projects: {
     name: 'by_name'
-  },
-  checkpoints: {
-    conversationTime: 'by_conversation_time'
   }
 } as const;
 
@@ -69,15 +65,6 @@ export interface ArchiveProject {
   updatedAt: string;
 }
 
-export interface ArchiveCheckpoint {
-  id: string;
-  conversationId: string;
-  name: string;
-  note: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface ArchiveMessage {
   id: string;
   conversationId: string;
@@ -107,6 +94,7 @@ export type ArchiveEventType =
   | 'recording-resumed'
   | 'recording-stopped'
   | 'turn-suppressed'
+  | 'checkpoint'
   | 'adapter-health';
 
 export interface ArchiveEvent {
