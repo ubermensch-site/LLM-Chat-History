@@ -24,6 +24,13 @@ export class CheckpointNotFoundError extends Error {
   }
 }
 
+export class CheckpointConflictError extends Error {
+  constructor(checkpointId: string) {
+    super(`Checkpoint ID conflicts with different local data: ${checkpointId}`);
+    this.name = 'CheckpointConflictError';
+  }
+}
+
 function cleanName(value: string): string {
   const name = value.trim().replace(/\s+/g, ' ');
   if (!name) throw new Error('Checkpoint name cannot be empty');
@@ -65,6 +72,17 @@ function toEvent(checkpoint: ArchiveCheckpoint): ArchiveEvent {
   };
 }
 
+function sameCheckpoint(a: ArchiveCheckpoint, b: ArchiveCheckpoint): boolean {
+  return (
+    a.id === b.id &&
+    a.conversationId === b.conversationId &&
+    a.name === b.name &&
+    a.note === b.note &&
+    a.createdAt === b.createdAt &&
+    a.updatedAt === b.updatedAt
+  );
+}
+
 export async function listCheckpoints(
   db: IDBDatabase,
   conversationId: string
@@ -88,26 +106,41 @@ export async function createCheckpoint(
   conversationId: string,
   name: string,
   note: string | null = null,
-  now = new Date().toISOString()
+  now = new Date().toISOString(),
+  checkpointId = `checkpoint:${crypto.randomUUID()}`
 ): Promise<ArchiveCheckpoint> {
   const transaction = db.transaction([STORES.conversations, STORES.events], 'readwrite');
-  const conversation = await requestToPromise<ArchiveConversation | undefined>(
-    transaction.objectStore(STORES.conversations).get(conversationId)
-  );
+  const conversations = transaction.objectStore(STORES.conversations);
+  const events = transaction.objectStore(STORES.events);
+  const [conversation, existingEvent] = await Promise.all([
+    requestToPromise<ArchiveConversation | undefined>(conversations.get(conversationId)),
+    requestToPromise<ArchiveEvent | undefined>(events.get(checkpointId))
+  ]);
   if (!conversation) {
     transaction.abort();
     throw new CheckpointConversationNotFoundError(conversationId);
   }
 
   const checkpoint: ArchiveCheckpoint = {
-    id: `checkpoint:${crypto.randomUUID()}`,
+    id: checkpointId,
     conversationId,
     name: cleanName(name),
     note: cleanNote(note),
     createdAt: now,
     updatedAt: now
   };
-  transaction.objectStore(STORES.events).add(toEvent(checkpoint));
+
+  if (existingEvent) {
+    const existing = fromEvent(existingEvent);
+    if (!existing || !sameCheckpoint(existing, checkpoint)) {
+      transaction.abort();
+      throw new CheckpointConflictError(checkpointId);
+    }
+    await transactionDone(transaction);
+    return existing;
+  }
+
+  events.add(toEvent(checkpoint));
   await transactionDone(transaction);
   return checkpoint;
 }
