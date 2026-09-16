@@ -75,9 +75,10 @@ const record: LibraryRecord = { conversation, messages, project };
 
 const unsortedConversation: ArchiveConversation = {
   ...conversation,
-  id: 'conv:chatgpt:unsorted',
-  providerConversationId: 'provider-unsorted',
-  providerKey: 'chatgpt:provider-unsorted',
+  id: 'conv:chatgpt:loose',
+  providerConversationId: 'provider-loose',
+  providerKey: 'chatgpt:provider-loose',
+  sourceUrl: 'https://chatgpt.com/c/provider-loose',
   customTitle: 'Loose notes',
   updatedAt: '2026-09-16T09:00:00.000Z'
 };
