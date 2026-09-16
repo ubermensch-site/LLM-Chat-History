@@ -122,7 +122,10 @@ describe('checkpoint search/export/import integration', () => {
     const localConversation: ArchiveConversation = {
       ...bundle.conversation,
       id: 'conv:local-target',
-      providerKey: bundle.conversation.providerKey,
+      providerId: 'chatgpt',
+      providerConversationId: 'provider-checkpoint-shared',
+      providerKey: 'chatgpt:provider-checkpoint-shared',
+      provisional: false,
       createdAt: '2026-09-16T09:00:00.000Z',
       updatedAt: '2026-09-16T09:00:00.000Z',
       lastObservedAt: '2026-09-16T09:00:00.000Z'
