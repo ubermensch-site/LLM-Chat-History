@@ -1,6 +1,6 @@
 import type { VisibleActivityKind } from '../../shared/types';
 
-const ACTION_PREFIX = /^(?:thinking|thought\b|reasoning|search(?:ing|ed)?|brows(?:ing|ed)?|read(?:ing)?|check(?:ing|ed)?|fetch(?:ing|ed)?|open(?:ing|ed)?|run(?:ning|ran)?|analy[sz](?:ing|ed)?|writ(?:ing|ten|e)|edit(?:ing|ed)?|updat(?:ing|ed)|creat(?:ing|ed)|implement(?:ing|ed)?|test(?:ing|ed)?|build(?:ing|built)?|verif(?:ying|ied)|download(?:ing|ed)?|upload(?:ing|ed)?|inspect(?:ing|ed)?|compar(?:ing|ed)|generat(?:ing|ed)|sav(?:ing|ed)|us(?:ing|ed)|call(?:ing|ed)?|load(?:ing|ed)?|connect(?:ing|ed)?|prepar(?:ing|ed)|process(?:ing|ed)?|work(?:ing|ed)?|wait(?:ing|ed)?|retry(?:ing|ied)?|continu(?:ing|ed)|looking up|looked up)\b/i;
+const ACTION_PREFIX = /^(?:thinking|thought\b|reasoning|search(?:ing|ed)?|brows(?:ing|ed)?|read(?:ing)?|check(?:ing|ed)?|fetc[h](?:ing|ed)?|open(?:ing|ed)?|run(?:ning|ran)?|analy[sz](?:ing|ed)?|writ(?:ing|ten|e)|edit(?:ing|ed)?|updat(?:ing|ed)|creat(?:ing|ed)|implement(?:ing|ed)?|test(?:ing|ed)?|build(?:ing|built)?|verif(?:ying|ied)|download(?:ing|ed)?|upload(?:ing|ed)?|inspect(?:ing|ed)?|compar(?:ing|ed)|generat(?:ing|ed)|sav(?:ing|ed)|us(?:ing|ed)|call(?:ing|ed)?|load(?:ing|ed)?|connect(?:ing|ed)?|prepar(?:ing|ed)|process(?:ing|ed)?|work(?:ing|ed)?|wait(?:ing|ed)?|retry(?:ing|ied)?|continu(?:ing|ed)|looking up|looked up)\b/i;
 
 const EXCLUDED_CONTROL_TEXT = new Set([
   'copy',
