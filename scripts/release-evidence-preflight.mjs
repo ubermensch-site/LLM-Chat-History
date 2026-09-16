@@ -3,6 +3,7 @@ import { basename, relative, resolve, sep } from 'node:path';
 
 const SESSION_SCHEMA = 'llm-chat-history/release-qa-session';
 const REPORT_SCHEMA = 'llm-chat-history/live-qa-report';
+const APPROVAL_SCHEMA = 'llm-chat-history/release-approval';
 const REQUIRED_SCENARIOS = [1,2,3,4,5,6,7,8,9,10];
 
 function assert(condition, message) {
@@ -141,12 +142,39 @@ function renderMarkdown(session, reportsValidated) {
   return `${lines.join('\n')}\n`;
 }
 
+function buildApprovalManifest(session, reportsValidated) {
+  return {
+    schema: APPROVAL_SCHEMA,
+    schemaVersion: 1,
+    candidate: {
+      commitSha: session.candidate.commitSha,
+      version: session.candidate.version,
+      unpackedArtifact: session.candidate.unpackedArtifact,
+      unpackedArtifactSha256: session.candidate.unpackedArtifactSha256,
+      packagedArtifactSha256: session.candidate.packagedArtifactSha256,
+      ciRunId: session.candidate.ciRunId
+    },
+    environment: {
+      browser: session.environment.browser,
+      browserVersion: session.environment.browserVersion,
+      os: session.environment.os
+    },
+    testedAt: session.testedAt,
+    tester: session.tester,
+    scenarioCount: REQUIRED_SCENARIOS.length,
+    reportsValidated,
+    allScenariosPass: true
+  };
+}
+
 const args = process.argv.slice(2);
 const evidenceIndex = args.indexOf('--evidence');
-assert(evidenceIndex >= 0 && args[evidenceIndex + 1], 'Usage: node scripts/release-evidence-preflight.mjs --evidence <directory> [--output <markdown>]');
+assert(evidenceIndex >= 0 && args[evidenceIndex + 1], 'Usage: node scripts/release-evidence-preflight.mjs --evidence <directory> [--output <markdown>] [--approval-output <json>]');
 const evidenceDir = resolve(args[evidenceIndex + 1]);
 const outputIndex = args.indexOf('--output');
 const outputPath = outputIndex >= 0 && args[outputIndex + 1] ? resolve(args[outputIndex + 1]) : resolve(evidenceDir, 'release-qa-preflight.md');
+const approvalOutputIndex = args.indexOf('--approval-output');
+const approvalOutputPath = approvalOutputIndex >= 0 && args[approvalOutputIndex + 1] ? resolve(args[approvalOutputIndex + 1]) : resolve(evidenceDir, 'release-approval.json');
 
 const root = resolve(import.meta.dirname, '..');
 const packageJson = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
@@ -165,5 +193,8 @@ for (const scenario of session.scenarios) {
 
 const markdown = renderMarkdown(session, reportsValidated);
 await writeFile(outputPath, markdown, 'utf8');
+const approval = buildApprovalManifest(session, reportsValidated);
+await writeFile(approvalOutputPath, `${JSON.stringify(approval, null, 2)}\n`, 'utf8');
 console.log(`Release QA preflight PASS: ${REQUIRED_SCENARIOS.length} scenarios, ${reportsValidated} report(s)`);
 console.log(`Summary: ${relative(process.cwd(), outputPath) || basename(outputPath)}`);
+console.log(`Approval manifest: ${relative(process.cwd(), approvalOutputPath) || basename(approvalOutputPath)}`);
