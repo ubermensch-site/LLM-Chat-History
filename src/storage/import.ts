@@ -6,7 +6,8 @@ import {
   STORES,
   type ArchiveConversation,
   type ArchiveEvent,
-  type ArchiveMessage
+  type ArchiveMessage,
+  type ArchiveProject
 } from './schema';
 
 export class ArchiveImportConflictError extends Error {
@@ -35,6 +36,19 @@ function sameStableIdentity(a: ArchiveConversation, b: ArchiveConversation): boo
 
 function later<T>(a: T, aAt: string, b: T, bAt: string): T {
   return bAt > aAt ? b : a;
+}
+
+function mergedProject(existing: ArchiveProject | undefined, imported: ArchiveProject): ArchiveProject {
+  if (!existing) return imported;
+  const folders = new Map(imported.folders.map((folder) => [folder.id, folder] as const));
+  for (const folder of existing.folders) folders.set(folder.id, folder);
+  return {
+    id: existing.id,
+    name: existing.name,
+    folders: [...folders.values()],
+    createdAt: imported.createdAt < existing.createdAt ? imported.createdAt : existing.createdAt,
+    updatedAt: imported.updatedAt > existing.updatedAt ? imported.updatedAt : existing.updatedAt
+  };
 }
 
 function mergedConversation(
@@ -93,6 +107,13 @@ function mergedConversation(
   if (archivedAt) result.archivedAt = archivedAt;
   else delete result.archivedAt;
 
+  if (existing.projectId) result.projectId = existing.projectId;
+  else delete result.projectId;
+  if (existing.folderId) result.folderId = existing.folderId;
+  else delete result.folderId;
+  if (existing.tags?.length) result.tags = [...existing.tags];
+  else delete result.tags;
+
   return result;
 }
 
@@ -139,7 +160,7 @@ export async function importArchiveBundle(
   bundle: ArchiveExportBundle
 ): Promise<ArchiveImportResult> {
   const transaction = db.transaction(
-    [STORES.conversations, STORES.messages, STORES.events],
+    [STORES.conversations, STORES.messages, STORES.events, STORES.projects],
     'readwrite'
   );
 
@@ -147,6 +168,7 @@ export async function importArchiveBundle(
     const conversations = transaction.objectStore(STORES.conversations);
     const messages = transaction.objectStore(STORES.messages);
     const events = transaction.objectStore(STORES.events);
+    const projects = transaction.objectStore(STORES.projects);
     const imported = bundle.conversation;
 
     const byIdRequest = conversations.get(imported.id);
@@ -157,15 +179,20 @@ export async function importArchiveBundle(
       : null;
     const allMessagesRequest = messages.getAll();
     const allEventsRequest = events.getAll();
+    const existingProjectRequest = bundle.project ? projects.get(bundle.project.id) : null;
 
-    const [existingById, existingByProvider, allMessages, allEvents] = await Promise.all([
-      requestToPromise<ArchiveConversation | undefined>(byIdRequest),
-      byProviderRequest
-        ? requestToPromise<ArchiveConversation | undefined>(byProviderRequest)
-        : Promise.resolve(undefined),
-      requestToPromise<ArchiveMessage[]>(allMessagesRequest),
-      requestToPromise<ArchiveEvent[]>(allEventsRequest)
-    ]);
+    const [existingById, existingByProvider, allMessages, allEvents, existingProject] =
+      await Promise.all([
+        requestToPromise<ArchiveConversation | undefined>(byIdRequest),
+        byProviderRequest
+          ? requestToPromise<ArchiveConversation | undefined>(byProviderRequest)
+          : Promise.resolve(undefined),
+        requestToPromise<ArchiveMessage[]>(allMessagesRequest),
+        requestToPromise<ArchiveEvent[]>(allEventsRequest),
+        existingProjectRequest
+          ? requestToPromise<ArchiveProject | undefined>(existingProjectRequest)
+          : Promise.resolve(undefined)
+      ]);
 
     if (existingById && !sameStableIdentity(existingById, imported)) {
       throw new ArchiveImportConflictError(
@@ -244,6 +271,12 @@ export async function importArchiveBundle(
       }
     }
 
+    if (
+      bundle.project &&
+      finalConversation.projectId === bundle.project.id
+    ) {
+      projects.put(mergedProject(existingProject, bundle.project));
+    }
     conversations.put(finalConversation);
     for (const message of messageWrites) messages.put(message);
     for (const event of eventWrites) events.put(event);

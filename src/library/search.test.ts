@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ArchiveConversation, ArchiveMessage } from '../storage/schema';
+import type { ArchiveConversation, ArchiveMessage, ArchiveProject } from '../storage/schema';
 import { filterLibraryRecords, matchesLibraryQuery } from './search';
 
 const conversation: ArchiveConversation = {
@@ -35,7 +35,26 @@ const message: ArchiveMessage = {
   updatedAt: '2026-09-16T10:01:00.000Z'
 };
 
-const record = { conversation, messages: [message] };
+const record = { conversation, messages: [message], project: undefined };
+
+const project: ArchiveProject = {
+  id: 'project:storefront',
+  name: 'Storefront Redesign',
+  folders: [{ id: 'folder:qa', name: 'QA Follow-up' }],
+  createdAt: '2026-09-16T09:00:00.000Z',
+  updatedAt: '2026-09-16T09:00:00.000Z'
+};
+
+const organizedRecord = {
+  conversation: {
+    ...conversation,
+    projectId: project.id,
+    folderId: project.folders[0]!.id,
+    tags: ['Urgent', 'Visual QA']
+  },
+  messages: [message],
+  project
+};
 
 describe('library search', () => {
   it('matches conversation metadata case-insensitively', () => {
@@ -46,6 +65,14 @@ describe('library search', () => {
   it('matches captured message text', () => {
     expect(matchesLibraryQuery(record, 'non-zero price')).toBe(true);
     expect(matchesLibraryQuery(record, 'missing phrase')).toBe(false);
+  });
+
+  it('matches project, folder and tag organization metadata', () => {
+    expect(matchesLibraryQuery(organizedRecord, 'storefront redesign')).toBe(true);
+    expect(matchesLibraryQuery(organizedRecord, 'qa follow-up')).toBe(true);
+    expect(matchesLibraryQuery(organizedRecord, 'visual qa')).toBe(true);
+    expect(matchesLibraryQuery(organizedRecord, 'urgent')).toBe(true);
+    expect(matchesLibraryQuery(record, 'unsorted')).toBe(true);
   });
 
   it('returns every record for an empty query', () => {

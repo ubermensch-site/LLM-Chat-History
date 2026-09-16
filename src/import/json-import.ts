@@ -8,7 +8,9 @@ import type {
   ArchiveConversation,
   ArchiveEvent,
   ArchiveEventType,
-  ArchiveMessage
+  ArchiveMessage,
+  ArchiveProject,
+  ArchiveProjectFolder
 } from '../storage/schema';
 
 const EVENT_TYPES = new Set<ArchiveEventType>([
@@ -107,6 +109,39 @@ function dataRecord(value: unknown, path: string): ArchiveEvent['data'] {
   return result;
 }
 
+function parseTags(value: unknown, path: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) fail(path, 'expected an array');
+  const tags = value.map((entry, index) => stringValue(entry, `${path}[${index}]`).trim());
+  if (tags.some((tag) => !tag)) fail(path, 'tags cannot be empty');
+  const keys = tags.map((tag) => tag.toLocaleLowerCase());
+  if (new Set(keys).size !== keys.length) fail(path, 'contains duplicate tags');
+  return tags;
+}
+
+function parseProject(value: unknown): ArchiveProject {
+  const input = record(value, 'archive.project');
+  if (!Array.isArray(input.folders)) fail('archive.project.folders', 'expected an array');
+  const folders: ArchiveProjectFolder[] = input.folders.map((entry, index) => {
+    const folder = record(entry, `archive.project.folders[${index}]`);
+    return {
+      id: stringValue(folder.id, `archive.project.folders[${index}].id`),
+      name: stringValue(folder.name, `archive.project.folders[${index}].name`).trim()
+    };
+  });
+  if (folders.some((folder) => !folder.name)) fail('archive.project.folders', 'folder names cannot be empty');
+  if (new Set(folders.map((folder) => folder.id)).size !== folders.length) {
+    fail('archive.project.folders', 'contains duplicate folder identifiers');
+  }
+  return {
+    id: stringValue(input.id, 'archive.project.id'),
+    name: stringValue(input.name, 'archive.project.name').trim(),
+    folders,
+    createdAt: timestamp(input.createdAt, 'archive.project.createdAt'),
+    updatedAt: timestamp(input.updatedAt, 'archive.project.updatedAt')
+  };
+}
+
 function parseConversation(value: unknown): ArchiveConversation {
   const input = record(value, 'conversation');
   const conversation: ArchiveConversation = {
@@ -144,8 +179,15 @@ function parseConversation(value: unknown): ArchiveConversation {
   );
   const customTitle = optionalString(input.customTitle, 'conversation.customTitle');
   const archivedAt = optionalTimestamp(input.archivedAt, 'conversation.archivedAt');
+  const projectId = optionalString(input.projectId, 'conversation.projectId');
+  const folderId = optionalString(input.folderId, 'conversation.folderId');
+  const tags = parseTags(input.tags, 'conversation.tags');
   if (customTitle) conversation.customTitle = customTitle;
   if (archivedAt) conversation.archivedAt = archivedAt;
+  if (projectId) conversation.projectId = projectId;
+  if (folderId) conversation.folderId = folderId;
+  if (tags?.length) conversation.tags = tags;
+  if (folderId && !projectId) fail('conversation.folderId', 'a folder requires a project assignment');
 
   if (conversation.providerConversationId) {
     const expected = providerConversationKey(
@@ -282,6 +324,24 @@ export function parseJsonArchiveExport(text: string): ArchiveExportBundle {
 
   const messages = input.messages.map((entry, index) => parseMessage(entry, index, conversation));
   const events = input.events.map((entry, index) => parseEvent(entry, index, conversation));
+  let project: ArchiveProject | null | undefined;
+  if (input.project === null) project = null;
+  else if (input.project !== undefined) project = parseProject(input.project);
+
+  if (conversation.projectId) {
+    if (!project) fail('archive.project', 'organized conversation requires its project definition');
+    if (project.id !== conversation.projectId) {
+      fail('archive.project.id', 'does not match conversation.projectId');
+    }
+    if (
+      conversation.folderId &&
+      !project.folders.some((folder) => folder.id === conversation.folderId)
+    ) {
+      fail('conversation.folderId', 'does not exist in the exported project');
+    }
+  } else if (project) {
+    fail('archive.project', 'Unsorted conversation cannot carry an assigned project definition');
+  }
 
   if (conversation.messageCount !== messages.length) {
     fail(
@@ -294,5 +354,7 @@ export function parseJsonArchiveExport(text: string): ArchiveExportBundle {
   assertUnique(messages.map((message) => message.providerTurnId), 'archive.messages.providerTurnId');
   assertUnique(events.map((event) => event.id), 'archive.events');
 
-  return { conversation, messages, events, exportedAt };
+  const bundle: ArchiveExportBundle = { conversation, messages, events, exportedAt };
+  if (input.project !== undefined) bundle.project = project ?? null;
+  return bundle;
 }

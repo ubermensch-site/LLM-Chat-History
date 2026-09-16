@@ -1,5 +1,10 @@
 import { conversationDisplayTitle } from '../storage/conversation';
-import type { ArchiveConversation, ArchiveEvent, ArchiveMessage } from '../storage/schema';
+import type {
+  ArchiveConversation,
+  ArchiveEvent,
+  ArchiveMessage,
+  ArchiveProject
+} from '../storage/schema';
 
 export const ARCHIVE_EXPORT_SCHEMA = 'llm-chat-history/archive-export';
 export const ARCHIVE_EXPORT_SCHEMA_VERSION = 1;
@@ -9,6 +14,7 @@ export interface ArchiveExportBundle {
   messages: ArchiveMessage[];
   events: ArchiveEvent[];
   exportedAt: string;
+  project?: ArchiveProject | null;
 }
 
 function providerLabel(providerId: ArchiveConversation['providerId']): string {
@@ -41,10 +47,14 @@ function stateEventLabel(event: ArchiveEvent): string | null {
 export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
   const { conversation, messages, events, exportedAt } = bundle;
   const title = escapeMetadata(conversationDisplayTitle(conversation));
+  const folder = bundle.project?.folders.find((entry) => entry.id === conversation.folderId);
   const lines: string[] = [
     `# ${title}`,
     '',
     `- **Provider:** ${providerLabel(conversation.providerId)}`,
+    `- **Project:** ${bundle.project?.name ?? 'Unsorted'}`,
+    ...(folder ? [`- **Folder:** ${folder.name}`] : []),
+    ...(conversation.tags?.length ? [`- **Tags:** ${conversation.tags.join(', ')}`] : []),
     `- **Source:** ${conversation.sourceUrl}`,
     `- **Conversation ID:** ${conversation.providerConversationId ?? 'provisional'}`,
     `- **First captured:** ${conversation.createdAt}`,
@@ -103,7 +113,8 @@ export function renderJsonExport(bundle: ArchiveExportBundle): string {
       exportedAt: bundle.exportedAt,
       conversation: bundle.conversation,
       messages: bundle.messages,
-      events: bundle.events
+      events: bundle.events,
+      ...(bundle.project !== undefined ? { project: bundle.project } : {})
     },
     null,
     2

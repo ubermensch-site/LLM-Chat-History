@@ -48,8 +48,14 @@ function migrateToV1(db: IDBDatabase): void {
   events.createIndex(INDEXES.events.typeTime, ['type', 'createdAt']);
 }
 
+function migrateToV2(db: IDBDatabase): void {
+  const projects = db.createObjectStore(STORES.projects, { keyPath: 'id' });
+  projects.createIndex(INDEXES.projects.name, 'name', { unique: false });
+}
+
 export function applyArchiveMigrations(db: IDBDatabase, oldVersion: number): void {
   if (oldVersion < 1) migrateToV1(db);
+  if (oldVersion < 2) migrateToV2(db);
 }
 
 export function openArchiveDb(options: OpenArchiveDbOptions = {}): Promise<IDBDatabase> {

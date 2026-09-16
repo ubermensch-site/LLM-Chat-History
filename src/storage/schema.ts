@@ -1,12 +1,13 @@
 import type { ProviderId, RecorderState, TurnRole } from '../shared/types';
 
 export const ARCHIVE_DB_NAME = 'llm-chat-history';
-export const ARCHIVE_DB_VERSION = 1;
+export const ARCHIVE_DB_VERSION = 2;
 
 export const STORES = {
   conversations: 'conversations',
   messages: 'messages',
-  events: 'events'
+  events: 'events',
+  projects: 'projects'
 } as const;
 
 export const INDEXES = {
@@ -23,6 +24,9 @@ export const INDEXES = {
   events: {
     conversationTime: 'by_conversation_time',
     typeTime: 'by_type_time'
+  },
+  projects: {
+    name: 'by_name'
   }
 } as const;
 
@@ -37,12 +41,28 @@ export interface ArchiveConversation {
   title: string | null;
   customTitle?: string;
   archivedAt?: string;
+  projectId?: string;
+  folderId?: string;
+  tags?: string[];
   createdAt: string;
   updatedAt: string;
   lastObservedAt: string;
   messageCount: number;
   recordingState: RecorderState;
   recordingStateUpdatedAt: string;
+}
+
+export interface ArchiveProjectFolder {
+  id: string;
+  name: string;
+}
+
+export interface ArchiveProject {
+  id: string;
+  name: string;
+  folders: ArchiveProjectFolder[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ArchiveMessage {

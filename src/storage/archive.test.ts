@@ -83,7 +83,7 @@ afterEach(async () => {
   }
 });
 
-describe('archive schema v1', () => {
+describe('archive schema v2', () => {
   it('creates the canonical stores and indexes', async () => {
     const name = `llm-chat-history-schema-${crypto.randomUUID()}`;
     const db = await openArchiveDb({ name, factory: indexedDB });
@@ -91,11 +91,12 @@ describe('archive schema v1', () => {
     expect([...db.objectStoreNames]).toEqual([
       STORES.conversations,
       STORES.events,
-      STORES.messages
+      STORES.messages,
+      STORES.projects
     ]);
 
     const transaction = db.transaction(
-      [STORES.conversations, STORES.messages, STORES.events],
+      [STORES.conversations, STORES.messages, STORES.events, STORES.projects],
       'readonly'
     );
     expect([...transaction.objectStore(STORES.conversations).indexNames]).toContain(
@@ -106,6 +107,9 @@ describe('archive schema v1', () => {
     );
     expect([...transaction.objectStore(STORES.events).indexNames]).toContain(
       INDEXES.events.conversationTime
+    );
+    expect([...transaction.objectStore(STORES.projects).indexNames]).toContain(
+      INDEXES.projects.name
     );
 
     db.close();

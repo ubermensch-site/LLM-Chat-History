@@ -21,12 +21,15 @@
     }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: var(--surface); color: var(--on-surface); }
-    button, input { font: inherit; }
+    button, input, select { font: inherit; }
     .app { display: grid; grid-template-columns: minmax(280px, 360px) 1fr; min-height: 100vh; }
     .sidebar { border-right: 1px solid var(--outline-variant); background: var(--surface-container); padding: 20px 14px; }
     .brand { font-size: 20px; font-weight: 700; margin: 0 8px 16px; }
-    .search { width: 100%; min-height: 44px; border: 1px solid var(--outline); border-radius: 24px; padding: 0 16px; background: var(--surface); color: var(--on-surface); outline: none; }
-    .search:focus { border: 2px solid var(--primary); }
+    .search, .select, .text-field { width: 100%; min-height: 44px; border: 1px solid var(--outline); border-radius: 14px; padding: 0 14px; background: var(--surface); color: var(--on-surface); outline: none; }
+    .search { border-radius: 24px; padding: 0 16px; }
+    .search:focus, .select:focus, .text-field:focus { border: 2px solid var(--primary); }
+    .filter-block { margin-top: 10px; }
+    .filter-label { display: block; margin: 0 8px 5px; font-size: 11px; font-weight: 700; color: var(--on-surface-variant); text-transform: uppercase; letter-spacing: .05em; }
     .view-tabs { display: flex; gap: 6px; margin: 10px 2px 4px; }
     .view-tab { flex: 1; min-height: 34px; border: 1px solid var(--outline-variant); border-radius: 18px; background: transparent; color: var(--on-surface-variant); cursor: pointer; font-weight: 600; }
     .view-tab.selected { background: #e8def8; border-color: transparent; color: #1d192b; }
@@ -48,10 +51,17 @@
     .button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
     .button.danger { color: var(--error); border-color: color-mix(in srgb, var(--error) 65%, var(--outline)); }
     .button.danger-armed { background: var(--error); border-color: var(--error); color: var(--on-primary); }
-    .button:disabled { opacity: .45; cursor: default; }
+    .button:disabled, .select:disabled, .text-field:disabled { opacity: .45; cursor: default; }
     .button:focus-visible, .view-tab:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 45%, transparent); outline-offset: 2px; }
     .library-status { margin: 0; min-height: 16px; font-size: 11px; color: var(--on-surface-variant); text-align: right; line-height: 1.35; overflow-wrap: anywhere; }
     .library-status.error { color: var(--error); }
+    .organizer { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(220px, 1.4fr); gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--outline-variant); background: var(--surface-container); }
+    .organizer-field { min-width: 0; display: grid; gap: 6px; }
+    .organizer-label { font-size: 11px; font-weight: 750; color: var(--on-surface-variant); text-transform: uppercase; letter-spacing: .05em; }
+    .organizer-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .organizer .button { min-height: 34px; padding: 0 11px; font-size: 12px; }
+    .tags-row { display: flex; gap: 6px; }
+    .tags-row .text-field { flex: 1; min-width: 0; }
     .visually-hidden { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
     .transcript { max-width: 900px; margin: 0 auto; padding: 24px; }
     .message { margin: 0 0 18px; padding: 16px; border-radius: 18px; background: var(--surface-container); }
@@ -70,6 +80,9 @@
       }
       .conversation.selected, .view-tab.selected { background: #4a4458; color: #e8def8; }
     }
+    @media (max-width: 1000px) {
+      .organizer { grid-template-columns: 1fr; }
+    }
     @media (max-width: 900px) {
       .topbar { flex-direction: column; }
       .action-block { justify-items: start; max-width: 100%; }
@@ -80,6 +93,7 @@
       .app { grid-template-columns: 1fr; }
       .sidebar { border-right: 0; border-bottom: 1px solid var(--outline-variant); }
       .topbar { position: static; }
+      .organizer { padding: 14px; }
     }
   </style>
 </head>
@@ -87,7 +101,14 @@
   <div class="app">
     <aside class="sidebar">
       <div class="brand">LLM Chat History</div>
-      <input id="search" class="search" type="search" placeholder="Search chats and messages…" autocomplete="off" aria-label="Search local chats">
+      <input id="search" class="search" type="search" placeholder="Search chats, projects, tags…" autocomplete="off" aria-label="Search local chats">
+      <div class="filter-block">
+        <label class="filter-label" for="project-filter">Project</label>
+        <select id="project-filter" class="select" disabled aria-label="Filter conversations by project">
+          <option value="all">All projects</option>
+          <option value="unsorted">Unsorted</option>
+        </select>
+      </div>
       <div class="view-tabs" aria-label="Conversation status">
         <button id="view-active" class="view-tab selected" type="button" aria-pressed="true">Active</button>
         <button id="view-archived" class="view-tab" type="button" aria-pressed="false">Archived</button>
@@ -114,6 +135,38 @@
           <p id="library-status" class="library-status" aria-live="polite"></p>
         </div>
       </header>
+      <section class="organizer" aria-label="Conversation organization">
+        <div class="organizer-field">
+          <label class="organizer-label" for="project-select">Project</label>
+          <select id="project-select" class="select" disabled>
+            <option value="">Unsorted</option>
+          </select>
+          <div class="organizer-actions">
+            <button id="new-project" class="button" type="button" disabled>New project</button>
+            <button id="rename-project" class="button" type="button" disabled>Rename</button>
+            <button id="delete-project" class="button danger" type="button" disabled>Delete</button>
+          </div>
+        </div>
+        <div class="organizer-field">
+          <label class="organizer-label" for="folder-select">Folder</label>
+          <select id="folder-select" class="select" disabled>
+            <option value="">No folder</option>
+          </select>
+          <div class="organizer-actions">
+            <button id="new-folder" class="button" type="button" disabled>New folder</button>
+            <button id="rename-folder" class="button" type="button" disabled>Rename</button>
+            <button id="delete-folder" class="button danger" type="button" disabled>Delete</button>
+          </div>
+        </div>
+        <div class="organizer-field">
+          <label class="organizer-label" for="tags-input">Tags</label>
+          <div class="tags-row">
+            <input id="tags-input" class="text-field" type="text" disabled placeholder="research, work, follow-up" aria-label="Comma-separated conversation tags">
+            <button id="save-tags" class="button primary" type="button" disabled>Save tags</button>
+          </div>
+          <div class="count" style="margin:0">Comma-separated. Tags are trimmed and de-duplicated locally.</div>
+        </div>
+      </section>
       <section id="transcript" class="transcript">
         <div class="empty">Your locally recorded conversations will appear here.</div>
       </section>
