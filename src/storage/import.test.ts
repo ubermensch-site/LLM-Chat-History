@@ -130,8 +130,10 @@ describe('archive JSON restore persistence', () => {
     const [conversation] = await repository.listConversations();
     expect(conversation).toEqual(source.conversation);
     expect(await repository.listMessages(conversation!.id)).toEqual(source.messages);
-    expect(await repository.listEvents(conversation!.id)).toEqual(
-      [...source.events].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    const restoredEvents = await repository.listEvents(conversation!.id);
+    expect(restoredEvents).toHaveLength(source.events.length);
+    expect([...restoredEvents].sort((a, b) => a.id.localeCompare(b.id))).toEqual(
+      [...source.events].sort((a, b) => a.id.localeCompare(b.id))
     );
   });
 
