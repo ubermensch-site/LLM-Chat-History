@@ -60,6 +60,7 @@ export interface DeleteConversationResult {
   conversationId: string;
   messagesDeleted: number;
   eventsDeleted: number;
+  checkpointsDeleted: number;
 }
 
 export async function deleteConversationCascade(
@@ -67,30 +68,30 @@ export async function deleteConversationCascade(
   conversationId: string
 ): Promise<DeleteConversationResult> {
   const transaction = db.transaction(
-    [STORES.conversations, STORES.messages, STORES.events],
+    [STORES.conversations, STORES.messages, STORES.events, STORES.checkpoints],
     'readwrite'
   );
   const conversations = transaction.objectStore(STORES.conversations);
   const messages = transaction.objectStore(STORES.messages);
   const events = transaction.objectStore(STORES.events);
+  const checkpoints = transaction.objectStore(STORES.checkpoints);
 
   const conversationRequest = conversations.get(conversationId);
   const messageKeysRequest = messages
     .index(INDEXES.messages.conversationOrder)
-    .getAllKeys(
-      IDBKeyRange.bound(
-        [conversationId, 0],
-        [conversationId, Number.MAX_SAFE_INTEGER]
-      )
-    );
+    .getAllKeys(IDBKeyRange.bound([conversationId, 0], [conversationId, Number.MAX_SAFE_INTEGER]));
   const eventKeysRequest = events
     .index(INDEXES.events.conversationTime)
     .getAllKeys(IDBKeyRange.bound([conversationId, ''], [conversationId, '\uffff']));
+  const checkpointKeysRequest = checkpoints
+    .index(INDEXES.checkpoints.conversationTime)
+    .getAllKeys(IDBKeyRange.bound([conversationId, ''], [conversationId, '\uffff']));
 
-  const [conversation, messageKeys, eventKeys] = await Promise.all([
+  const [conversation, messageKeys, eventKeys, checkpointKeys] = await Promise.all([
     requestToPromise<ArchiveConversation | undefined>(conversationRequest),
     requestToPromise<IDBValidKey[]>(messageKeysRequest),
-    requestToPromise<IDBValidKey[]>(eventKeysRequest)
+    requestToPromise<IDBValidKey[]>(eventKeysRequest),
+    requestToPromise<IDBValidKey[]>(checkpointKeysRequest)
   ]);
 
   if (!conversation) {
@@ -100,12 +101,14 @@ export async function deleteConversationCascade(
 
   for (const key of messageKeys) messages.delete(key);
   for (const key of eventKeys) events.delete(key);
+  for (const key of checkpointKeys) checkpoints.delete(key);
   conversations.delete(conversationId);
   await transactionDone(transaction);
 
   return {
     conversationId,
     messagesDeleted: messageKeys.length,
-    eventsDeleted: eventKeys.length
+    eventsDeleted: eventKeys.length,
+    checkpointsDeleted: checkpointKeys.length
   };
 }
