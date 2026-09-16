@@ -46,6 +46,7 @@ const messages: ArchiveMessage[] = [
     plainText: 'Answer',
     markdown: '**Answer**',
     partial: false,
+    modelLabel: 'GPT-5.6 Sol',
     contentHash: 'h2',
     firstObservedAt: '2026-09-16T10:06:00.000Z',
     lastObservedAt: '2026-09-16T10:06:00.000Z',
@@ -78,7 +79,7 @@ const events: ArchiveEvent[] = [
 ];
 
 describe('archive export', () => {
-  it('renders readable Markdown with state boundaries but no suppression internals', () => {
+  it('renders readable Markdown with state boundaries and visible model labels', () => {
     const markdown = renderMarkdownExport({
       conversation,
       messages,
@@ -90,12 +91,13 @@ describe('archive export', () => {
     expect(markdown).toContain('## User');
     expect(markdown).toContain('## Assistant');
     expect(markdown).toContain('**Answer**');
+    expect(markdown).toContain('**Model shown by provider:** GPT-5.6 Sol');
     expect(markdown).toContain('Recording paused');
     expect(markdown).toContain('Recording resumed');
     expect(markdown).not.toContain('private-turn');
   });
 
-  it('exports normalized JSON including schema metadata', () => {
+  it('exports normalized JSON including schema metadata and visible model labels', () => {
     const json = JSON.parse(
       renderJsonExport({
         conversation,
@@ -103,11 +105,12 @@ describe('archive export', () => {
         events,
         exportedAt: '2026-09-16T11:00:00.000Z'
       })
-    ) as Record<string, unknown>;
+    ) as { schema: string; schemaVersion: number; messages: ArchiveMessage[] };
 
     expect(json.schema).toBe('llm-chat-history/archive-export');
     expect(json.schemaVersion).toBe(1);
     expect(Array.isArray(json.messages)).toBe(true);
+    expect(json.messages[1]?.modelLabel).toBe('GPT-5.6 Sol');
   });
 
   it('builds deterministic filesystem-safe filenames', () => {
