@@ -3,6 +3,7 @@ import type {
   CreateCheckpointMessage,
   ProviderConversationIdentity,
   ProviderTurnObservation,
+  ProviderVisibleActivityObservation,
   RecorderCommandMessage,
   RecorderState
 } from '../shared/types';
@@ -22,7 +23,8 @@ import {
   type ArchiveConversation,
   type ArchiveEvent,
   type ArchiveEventType,
-  type ArchiveMessage
+  type ArchiveMessage,
+  type ArchiveVisibleActivity
 } from './schema';
 import { reconcileObservedTurnOrder } from './turn-order';
 
@@ -63,6 +65,57 @@ function recorderStateFromEvent(event: ArchiveEvent | undefined): RecorderState 
   return value === 'recording' || value === 'paused' || value === 'stopped' || value === 'error'
     ? value
     : null;
+}
+
+function turnContentHashInput(turn: ProviderTurnObservation): string {
+  return JSON.stringify([
+    turn.role,
+    turn.plainText,
+    turn.markdown,
+    turn.modelLabel ?? null
+  ]);
+}
+
+function observedActivityChanged(
+  stored: readonly ArchiveVisibleActivity[] | undefined,
+  observed: readonly ProviderVisibleActivityObservation[] | undefined
+): boolean {
+  if (!observed?.length) return false;
+  const byId = new Map((stored ?? []).map((activity) => [activity.providerActivityId, activity] as const));
+  return observed.some((activity) => {
+    const previous = byId.get(activity.providerActivityId);
+    return !previous ||
+      previous.kind !== activity.kind ||
+      previous.text !== activity.text ||
+      previous.orderHint !== activity.orderHint;
+  });
+}
+
+function mergeVisibleActivities(
+  stored: readonly ArchiveVisibleActivity[] | undefined,
+  observed: readonly ProviderVisibleActivityObservation[] | undefined
+): ArchiveVisibleActivity[] {
+  const byId = new Map<string, ArchiveVisibleActivity>();
+  for (const activity of stored ?? []) byId.set(activity.providerActivityId, activity);
+
+  for (const activity of observed ?? []) {
+    const previous = byId.get(activity.providerActivityId);
+    byId.set(activity.providerActivityId, {
+      providerActivityId: activity.providerActivityId,
+      kind: activity.kind,
+      text: activity.text,
+      orderHint: activity.orderHint,
+      firstObservedAt: previous?.firstObservedAt ?? activity.observedAt,
+      lastObservedAt: activity.observedAt
+    });
+  }
+
+  return [...byId.values()].sort(
+    (a, b) =>
+      a.firstObservedAt.localeCompare(b.firstObservedAt) ||
+      a.orderHint - b.orderHint ||
+      a.providerActivityId.localeCompare(b.providerActivityId)
+  );
 }
 
 export class ArchiveRepository {
@@ -228,7 +281,7 @@ export class ArchiveRepository {
     state: RecorderState
   ): Promise<void> {
     const id = messageId(conversation.id, turn.providerTurnId);
-    const contentHash = await sha256Hex(JSON.stringify([turn.role, turn.plainText, turn.markdown]));
+    const contentHash = await sha256Hex(turnContentHashInput(turn));
     const suppressionId = suppressedTurnEventId(conversation.id, turn.providerTurnId);
 
     const readTransaction = this.db.transaction([STORES.messages, STORES.events], 'readonly');
@@ -240,7 +293,8 @@ export class ArchiveRepository {
     );
     await transactionDone(readTransaction);
 
-    if (alreadySuppressed || existing?.contentHash === contentHash) return;
+    const activityChanged = observedActivityChanged(existing?.visibleActivities, turn.visibleActivities);
+    if (alreadySuppressed || (existing?.contentHash === contentHash && !activityChanged)) return;
 
     await this.appendEvent(
       archiveEvent(
@@ -287,7 +341,7 @@ export class ArchiveRepository {
     }
 
     const id = messageId(conversation.id, turn.providerTurnId);
-    const contentHash = await sha256Hex(JSON.stringify([turn.role, turn.plainText, turn.markdown]));
+    const contentHash = await sha256Hex(turnContentHashInput(turn));
 
     const transaction = this.db.transaction(
       [STORES.messages, STORES.conversations, STORES.events],
@@ -299,8 +353,10 @@ export class ArchiveRepository {
 
     const existing = await requestToPromise<ArchiveMessage | undefined>(messages.get(id));
     const isNew = !existing;
-    const contentChanged = Boolean(existing && existing.contentHash !== contentHash);
+    const activityChanged = observedActivityChanged(existing?.visibleActivities, turn.visibleActivities);
+    const contentChanged = Boolean(existing && (existing.contentHash !== contentHash || activityChanged));
     const finalized = Boolean(existing?.partial && !turn.partial);
+    const visibleActivities = mergeVisibleActivities(existing?.visibleActivities, turn.visibleActivities);
 
     const record: ArchiveMessage = {
       id,
@@ -316,6 +372,8 @@ export class ArchiveRepository {
       plainText: turn.plainText,
       markdown: turn.markdown,
       partial: turn.partial,
+      modelLabel: turn.modelLabel ?? existing?.modelLabel ?? null,
+      ...(visibleActivities.length ? { visibleActivities } : {}),
       contentHash,
       firstObservedAt: existing?.firstObservedAt ?? turn.observedAt,
       lastObservedAt: turn.observedAt,

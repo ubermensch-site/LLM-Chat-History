@@ -3,7 +3,8 @@ import type {
   ArchiveConversation,
   ArchiveEvent,
   ArchiveMessage,
-  ArchiveProject
+  ArchiveProject,
+  ArchiveVisibleActivity
 } from '../storage/schema';
 
 export const ARCHIVE_EXPORT_SCHEMA = 'llm-chat-history/archive-export';
@@ -25,8 +26,25 @@ function roleLabel(role: ArchiveMessage['role']): string {
   return role === 'user' ? 'User' : 'Assistant';
 }
 
+function activityLabel(activity: ArchiveVisibleActivity): string {
+  switch (activity.kind) {
+    case 'reasoning-summary':
+      return 'Visible reasoning summary';
+    case 'tool':
+      return 'Visible work step';
+    case 'status':
+      return 'Visible status';
+    case 'other':
+      return 'Visible activity';
+  }
+}
+
 function escapeMetadata(value: string): string {
   return value.replace(/\r?\n/g, ' ').trim();
+}
+
+function quoteMarkdown(value: string): string[] {
+  return value.split(/\r?\n/).map((line) => `> ${line}`);
 }
 
 function stateEventLabel(event: ArchiveEvent): string | null {
@@ -59,6 +77,10 @@ export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
   const { conversation, messages, events, exportedAt } = bundle;
   const title = escapeMetadata(conversationDisplayTitle(conversation));
   const folder = bundle.project?.folders.find((entry) => entry.id === conversation.folderId);
+  const visibleActivityCount = messages.reduce(
+    (total, message) => total + (message.visibleActivities?.length ?? 0),
+    0
+  );
   const lines: string[] = [
     `# ${title}`,
     '',
@@ -73,6 +95,9 @@ export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
     `- **Recording state at export:** ${conversation.recordingState}`,
     `- **Exported:** ${exportedAt}`,
     `- **Messages:** ${messages.length}`,
+    `- **Visible activity entries:** ${visibleActivityCount}`,
+    '',
+    '> Visible activity contains only reasoning summaries, work/tool steps and statuses that the provider rendered on screen. Hidden/private chain-of-thought is not available to this archive.',
     '',
     '---',
     ''
@@ -127,6 +152,16 @@ export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
     const message = item.message;
     const content = (message.markdown || message.plainText).trim();
     lines.push(`## ${roleLabel(message.role)}`, '');
+    if (message.role === 'assistant' && message.modelLabel) {
+      lines.push(`> **Model shown by provider:** ${escapeMetadata(message.modelLabel)}`, '');
+    }
+    if (message.role === 'assistant' && message.visibleActivities?.length) {
+      lines.push('### What the provider showed while working', '');
+      for (const activity of message.visibleActivities) {
+        lines.push(`> **${activityLabel(activity)}** — ${activity.firstObservedAt}`);
+        lines.push(...quoteMarkdown(activity.text), '');
+      }
+    }
     if (message.partial) lines.push('> **Partial capture**', '');
     lines.push(content || '_Empty rendered message_', '', '---', '');
   }

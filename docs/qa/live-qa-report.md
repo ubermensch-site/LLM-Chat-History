@@ -13,7 +13,7 @@ The file is generated locally. v0.1 has no report upload/network path.
 ## Report schema
 
 - `schema`: `llm-chat-history/live-qa-report`
-- `schemaVersion`: `1`
+- `schemaVersion`: `1` (pre-release schema; finalized with v0.1);
 - extension version and generation timestamp;
 - provider: ChatGPT;
 - route **shape only**: home/conversation/other, path-segment count, query/hash presence, stable-provider-ID-present boolean, provisional boolean;
@@ -27,7 +27,9 @@ The file is generated locally. v0.1 has no report upload/network path.
 - rendered-turn count;
 - whether a successful local save has been confirmed;
 - whether Import history is currently eligible;
-- canonical archive **counts only**: conversation found, message count, event count, persisted recorder state.
+- canonical archive **counts only**: conversation found, message count, event count, visible-activity count, persisted recorder state.
+
+`visibleActivityCount` is the number of saved provider-rendered work/reasoning-summary/status entries across the current conversation. It never contains their text.
 
 ## Explicitly excluded
 
@@ -35,16 +37,17 @@ The report does **not** serialize:
 
 - prompt text;
 - assistant answer text;
+- visible activity text;
 - Markdown/message bodies;
 - conversation title;
 - raw source URL or pathname;
 - ChatGPT provider conversation ID;
-- turn/message IDs themselves;
+- turn/message/activity IDs themselves;
 - project/folder/tag names;
 - checkpoint names/notes;
 - filesystem mirror paths.
 
-The implementation reconstructs the report from an allowlisted schema instead of serializing source objects. Tests deliberately inject secret route/query/message fields and assert they cannot appear in the JSON.
+The implementation reconstructs the report from an allowlisted schema instead of serializing source objects. Tests deliberately inject secret fields and visible-activity text and assert they cannot appear in the JSON.
 
 ## How to use it during issue #3 validation
 
@@ -54,15 +57,9 @@ The implementation reconstructs the report from an allowlisted schema instead of
 4. Perform the scenario.
 5. Click **QA report** again for the `after` snapshot.
 6. Verify expected state/count changes against `docs/qa/live-chatgpt-validation.md`.
-7. Attach the report files to issue #3 only if needed for evidence/debugging. Do not attach Markdown/JSON conversation exports unless their contents are deliberately non-sensitive test data.
+7. For a response that visibly shows work/reasoning/status entries, verify `archive.visibleActivityCount` increases after persistence and the Library's **What ChatGPT showed while working** section contains the expected entries.
+8. Attach the report files to issue #3 when useful. Do not attach Markdown/JSON conversation exports unless their contents are deliberately non-sensitive test data.
 
-## Current pinned candidate with this feature
+## Candidate pinning
 
-CI run: `35095244062`
-
-- packaged artifact: `llm-chat-history-v0.1-release-6683cca03fc5903b458b842f7a1888c19ffab184`
-  - GitHub artifact digest: `sha256:355a128a3ffd93cf948dc6e2dc4c226711ddb8d5df71b75f5807c1836b80b0a3`
-- unpacked artifact: `llm-chat-history-unpacked-6683cca03fc5903b458b842f7a1888c19ffab184`
-  - GitHub artifact digest: `sha256:58943d194b4bf5b27d058f919ec8987d452800038d4112cce26caec740e2183c`
-
-These artifacts came from the fully green PR #41 head and include the QA-report feature. A final release candidate must still be gated again after authenticated live QA and any resulting fixes.
+The exact v0.1 candidate is repinned after every runtime code change. Do not reuse an older artifact after a live-QA-driven change. The authoritative candidate commit, CI run, artifact names and digests are recorded on issues #3 and #37 after the exact `main` merge passes CI.

@@ -64,6 +64,25 @@ const messages: ArchiveMessage[] = [
       'The mobile checkout button is hidden by a fixed footer. The evidence points to a stacking context issue.',
     markdown: null,
     partial: false,
+    modelLabel: 'GPT-5.6 Sol',
+    visibleActivities: [
+      {
+        providerActivityId: 'assistant-1:visible:0:a',
+        kind: 'reasoning-summary',
+        text: 'Thinking about the mobile layout',
+        orderHint: 0,
+        firstObservedAt: '2026-09-16T10:02:30.000Z',
+        lastObservedAt: '2026-09-16T10:02:31.000Z'
+      },
+      {
+        providerActivityId: 'assistant-1:visible:1:b',
+        kind: 'tool',
+        text: 'Fetched storefront stylesheet and checked workflow status',
+        orderHint: 1,
+        firstObservedAt: '2026-09-16T10:02:40.000Z',
+        lastObservedAt: '2026-09-16T10:02:41.000Z'
+      }
+    ],
     contentHash: 'assistant-hash',
     firstObservedAt: '2026-09-16T10:03:00.000Z',
     lastObservedAt: '2026-09-16T10:03:00.000Z',
@@ -114,6 +133,21 @@ describe('full-text Library search', () => {
       orderHint: 1
     });
     expect(results[0]?.snippet).toContain('stacking context');
+  });
+
+  it('finds model labels and visible work even when the final answer does not contain them', () => {
+    const workResults = searchLibraryRecords([record], 'workflow status');
+    expect(workResults).toHaveLength(1);
+    expect(workResults[0]).toMatchObject({
+      kind: 'message',
+      messageId: messages[1]!.id,
+      field: 'message'
+    });
+    expect(workResults[0]?.snippet).toContain('workflow status');
+
+    const modelResults = searchLibraryRecords([record], 'GPT-5.6 Sol');
+    expect(modelResults).toHaveLength(1);
+    expect(modelResults[0]?.messageId).toBe(messages[1]!.id);
   });
 
   it('ranks metadata matches ahead of message-body matches deterministically', () => {

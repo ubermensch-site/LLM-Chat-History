@@ -1,6 +1,10 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ContentToBackgroundMessage, ProviderObservation } from '../shared/types';
+import type {
+  ContentToBackgroundMessage,
+  ProviderObservation,
+  ProviderVisibleActivityObservation
+} from '../shared/types';
 import { ArchiveRepository } from './archive';
 import { openArchiveDb, requestToPromise } from './db';
 import { INDEXES, STORES } from './schema';
@@ -55,6 +59,8 @@ function turnObservation(input: {
   orderHint: number;
   plainText: string;
   partial?: boolean;
+  modelLabel?: string | null;
+  visibleActivities?: ProviderVisibleActivityObservation[];
   observedAt: string;
 }): ProviderObservation {
   return {
@@ -69,6 +75,8 @@ function turnObservation(input: {
       plainText: input.plainText,
       markdown: input.plainText,
       partial: input.partial ?? false,
+      ...(input.modelLabel !== undefined ? { modelLabel: input.modelLabel } : {}),
+      ...(input.visibleActivities?.length ? { visibleActivities: input.visibleActivities } : {}),
       observedAt: input.observedAt
     }
   };
@@ -161,7 +169,7 @@ describe('archive schema v2', () => {
     expect(messages[0]?.plainText).toBe('hello');
   });
 
-  it('upserts streaming turns, preserves order and avoids duplicates', async () => {
+  it('upserts streaming turns, preserves visible activity and model labels, and avoids duplicates', async () => {
     const repository = await createRepository();
     const session = 'session-b';
     const conversationId = 'conversation-456';
@@ -198,6 +206,15 @@ describe('archive schema v2', () => {
           orderHint: 1,
           plainText: 'Partial',
           partial: true,
+          visibleActivities: [
+            {
+              providerActivityId: 'assistant-1:visible:0:a',
+              kind: 'reasoning-summary',
+              text: 'Thinking',
+              orderHint: 0,
+              observedAt: '2026-09-16T10:00:02.000Z'
+            }
+          ],
           observedAt: '2026-09-16T10:00:02.000Z'
         }),
         pageUrl
@@ -213,6 +230,16 @@ describe('archive schema v2', () => {
           orderHint: 1,
           plainText: 'Final answer',
           partial: false,
+          modelLabel: 'GPT-5.6 Sol',
+          visibleActivities: [
+            {
+              providerActivityId: 'assistant-1:visible:1:b',
+              kind: 'tool',
+              text: 'Fetched branch files',
+              orderHint: 1,
+              observedAt: '2026-09-16T10:00:03.000Z'
+            }
+          ],
           observedAt: '2026-09-16T10:00:03.000Z'
         }),
         pageUrl
@@ -242,6 +269,11 @@ describe('archive schema v2', () => {
     expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
     expect(messages[1]?.plainText).toBe('Final answer');
     expect(messages[1]?.partial).toBe(false);
+    expect(messages[1]?.modelLabel).toBe('GPT-5.6 Sol');
+    expect(messages[1]?.visibleActivities?.map((activity) => activity.text)).toEqual([
+      'Thinking',
+      'Fetched branch files'
+    ]);
 
     const events = await repository.listEvents(conversations[0]!.id);
     expect(events.filter((event) => event.type === 'message-added')).toHaveLength(2);

@@ -6,3 +6,5 @@ import './diagnostics-ui';
 import './performance-ui';
 import './live-qa-evidence-ui';
 import './privacy-notices';
+import './ux-enhancements';
+import './visible-activity-ui';

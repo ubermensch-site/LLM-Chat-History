@@ -63,7 +63,7 @@ export interface LiveQaReport {
   route: LiveQaRouteEvidence;
   dom: LiveQaDomEvidence;
   runtime: LiveQaRuntimeEvidence;
-  archive: LiveQaArchiveStatus;
+  archive: LiveQaArchiveStatus & { visibleActivityCount: number };
   privacy: {
     containsChatText: false;
     containsRawUrl: false;
@@ -200,6 +200,7 @@ export function buildLiveQaReport(input: {
       conversationFound: Boolean(input.archive.conversationFound),
       messageCount: Math.max(0, Math.floor(input.archive.messageCount)),
       eventCount: Math.max(0, Math.floor(input.archive.eventCount)),
+      visibleActivityCount: Math.max(0, Math.floor(input.archive.visibleActivityCount ?? 0)),
       recordingState: input.archive.recordingState
     },
     privacy: {

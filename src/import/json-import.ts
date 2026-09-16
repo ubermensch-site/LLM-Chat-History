@@ -10,7 +10,8 @@ import type {
   ArchiveEventType,
   ArchiveMessage,
   ArchiveProject,
-  ArchiveProjectFolder
+  ArchiveProjectFolder,
+  ArchiveVisibleActivity
 } from '../storage/schema';
 
 const EVENT_TYPES = new Set<ArchiveEventType>([
@@ -31,6 +32,7 @@ const EVENT_TYPES = new Set<ArchiveEventType>([
 
 const RECORDER_STATES = new Set(['recording', 'paused', 'stopped', 'error']);
 const ROLES = new Set(['user', 'assistant']);
+const ACTIVITY_KINDS = new Set(['reasoning-summary', 'tool', 'status', 'other']);
 
 export class ArchiveImportValidationError extends Error {
   constructor(message: string) {
@@ -63,6 +65,11 @@ function nullableString(value: unknown, path: string): string | null {
 function optionalString(value: unknown, path: string): string | undefined {
   if (value === undefined) return undefined;
   return stringValue(value, path);
+}
+
+function optionalNullableString(value: unknown, path: string): string | null | undefined {
+  if (value === undefined) return undefined;
+  return nullableString(value, path);
 }
 
 function booleanValue(value: unknown, path: string): boolean {
@@ -118,6 +125,28 @@ function parseTags(value: unknown, path: string): string[] | undefined {
   const keys = tags.map((tag) => tag.toLocaleLowerCase());
   if (new Set(keys).size !== keys.length) fail(path, 'contains duplicate tags');
   return tags;
+}
+
+function parseVisibleActivities(value: unknown, path: string): ArchiveVisibleActivity[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) fail(path, 'expected an array');
+  const activities = value.map((entry, index) => {
+    const itemPath = `${path}[${index}]`;
+    const input = record(entry, itemPath);
+    const kind = stringValue(input.kind, `${itemPath}.kind`) as ArchiveVisibleActivity['kind'];
+    if (!ACTIVITY_KINDS.has(kind)) fail(`${itemPath}.kind`, 'unsupported visible activity kind');
+    return {
+      providerActivityId: stringValue(input.providerActivityId, `${itemPath}.providerActivityId`),
+      kind,
+      text: stringValue(input.text, `${itemPath}.text`),
+      orderHint: integerValue(input.orderHint, `${itemPath}.orderHint`),
+      firstObservedAt: timestamp(input.firstObservedAt, `${itemPath}.firstObservedAt`),
+      lastObservedAt: timestamp(input.lastObservedAt, `${itemPath}.lastObservedAt`)
+    } satisfies ArchiveVisibleActivity;
+  });
+  const ids = activities.map((activity) => activity.providerActivityId);
+  if (new Set(ids).size !== ids.length) fail(path, 'contains duplicate visible activity identifiers');
+  return activities;
 }
 
 function parseProject(value: unknown): ArchiveProject {
@@ -254,6 +283,11 @@ function parseMessage(
     lastObservedAt: timestamp(input.lastObservedAt, `${path}.lastObservedAt`),
     updatedAt: timestamp(input.updatedAt, `${path}.updatedAt`)
   };
+
+  const modelLabel = optionalNullableString(input.modelLabel, `${path}.modelLabel`);
+  if (modelLabel !== undefined) message.modelLabel = modelLabel;
+  const visibleActivities = parseVisibleActivities(input.visibleActivities, `${path}.visibleActivities`);
+  if (visibleActivities?.length) message.visibleActivities = visibleActivities;
 
   if (message.conversationId !== conversation.id) {
     fail(`${path}.conversationId`, 'does not match exported conversation');

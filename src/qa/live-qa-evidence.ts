@@ -26,6 +26,7 @@ export interface LiveQaEvidenceSummary {
     renderedTurnCount: number | null;
     archiveMessageCount: number | null;
     archiveEventCount: number | null;
+    archiveVisibleActivityCount: number | null;
   };
 }
 
@@ -51,7 +52,9 @@ const RUNTIME_KEYS = [
   'adapterState', 'adapterCode', 'recordingState', 'storageHealth',
   'renderedTurnCount', 'lastSaveConfirmed', 'historicalImportAvailable'
 ] as const;
-const ARCHIVE_KEYS = ['conversationFound', 'messageCount', 'eventCount', 'recordingState'] as const;
+const ARCHIVE_KEYS = [
+  'conversationFound', 'messageCount', 'eventCount', 'visibleActivityCount', 'recordingState'
+] as const;
 const PRIVACY_KEYS = [
   'containsChatText', 'containsRawUrl', 'containsConversationTitle', 'containsProviderConversationId'
 ] as const;
@@ -77,12 +80,7 @@ function isString(value: unknown): value is string {
   return typeof value === 'string';
 }
 
-function push(
-  checks: LiveQaEvidenceCheck[],
-  id: string,
-  status: LiveQaEvidenceStatus,
-  detail: string
-): void {
+function push(checks: LiveQaEvidenceCheck[], id: string, status: LiveQaEvidenceStatus, detail: string): void {
   checks.push({ id, status, detail });
 }
 
@@ -91,12 +89,10 @@ function validateShape(value: unknown, checks: LiveQaEvidenceCheck[]): value is 
     push(checks, 'schema.shape', 'fail', 'Unexpected or missing top-level report fields.');
     return false;
   }
-
   if (value.schema !== LIVE_QA_REPORT_SCHEMA || value.schemaVersion !== LIVE_QA_REPORT_SCHEMA_VERSION) {
     push(checks, 'schema.version', 'fail', 'Unsupported live QA report schema/version.');
     return false;
   }
-
   if (!isString(value.generatedAt) || !isString(value.extensionVersion) || value.providerId !== 'chatgpt') {
     push(checks, 'schema.identity', 'fail', 'Invalid report identity metadata.');
     return false;
@@ -117,19 +113,18 @@ function validateShape(value: unknown, checks: LiveQaEvidenceCheck[]): value is 
   if (!['home', 'conversation', 'other-chatgpt'].includes(String(route.kind))) return false;
   if (!isNonNegativeInteger(route.pathSegmentCount)) return false;
   if (![route.queryPresent, route.hashPresent, route.providerConversationIdPresent, route.provisional].every(isBoolean)) return false;
-
   if (!Object.values(dom.selectors).every(isNonNegativeInteger)) return false;
-  if (![dom.stopGenerationControlPresent, dom.adapterScrollContainerFound, dom.adapterUsesDocumentScrollingElement,
-    dom.mobileAppShellScrollContainerPresent, dom.historyApiAvailable].every(isBoolean)) return false;
-
+  if (![dom.stopGenerationControlPresent, dom.adapterScrollContainerFound, dom.adapterUsesDocumentScrollingElement, dom.mobileAppShellScrollContainerPresent, dom.historyApiAvailable].every(isBoolean)) return false;
   if (!['healthy', 'degraded', 'error'].includes(String(runtime.adapterState))) return false;
   if (!isString(runtime.adapterCode)) return false;
   if (!['recording', 'paused', 'stopped', 'error'].includes(String(runtime.recordingState))) return false;
   if (!['unknown', 'healthy', 'error'].includes(String(runtime.storageHealth))) return false;
   if (!isNonNegativeInteger(runtime.renderedTurnCount)) return false;
   if (![runtime.lastSaveConfirmed, runtime.historicalImportAvailable].every(isBoolean)) return false;
-
-  if (!isBoolean(archive.conversationFound) || !isNonNegativeInteger(archive.messageCount) || !isNonNegativeInteger(archive.eventCount)) return false;
+  if (!isBoolean(archive.conversationFound)) return false;
+  if (!isNonNegativeInteger(archive.messageCount)) return false;
+  if (!isNonNegativeInteger(archive.eventCount)) return false;
+  if (!isNonNegativeInteger(archive.visibleActivityCount)) return false;
   if (archive.recordingState !== null && !['recording', 'paused', 'stopped', 'error'].includes(String(archive.recordingState))) return false;
   if (!Object.values(privacy).every(isBoolean)) return false;
 
@@ -157,7 +152,8 @@ export function evaluateLiveQaEvidence(
         storageHealth: null,
         renderedTurnCount: null,
         archiveMessageCount: null,
-        archiveEventCount: null
+        archiveEventCount: null,
+        archiveVisibleActivityCount: null
       }
     };
   }
@@ -170,8 +166,7 @@ export function evaluateLiveQaEvidence(
     push(checks, 'release.version', 'pass', `Extension version ${report.extensionVersion}.`);
   }
 
-  const privacyValues = Object.values(report.privacy);
-  if (privacyValues.every((flag) => flag === false)) {
+  if (Object.values(report.privacy).every((flag) => flag === false)) {
     push(checks, 'privacy.flags', 'pass', 'Report declares all protected content classes absent.');
   } else {
     push(checks, 'privacy.flags', 'fail', 'Report declares protected conversation content present.');
@@ -193,12 +188,7 @@ export function evaluateLiveQaEvidence(
     push(checks, 'storage.health', 'pass', 'Canonical local persistence reports healthy.');
   }
 
-  const semanticTurnNodes =
-    report.dom.selectors.sectionUserTurns +
-    report.dom.selectors.sectionAssistantTurns +
-    report.dom.selectors.articleTurns +
-    report.dom.selectors.userRoleNodes +
-    report.dom.selectors.assistantRoleNodes;
+  const semanticTurnNodes = report.dom.selectors.sectionUserTurns + report.dom.selectors.sectionAssistantTurns + report.dom.selectors.articleTurns + report.dom.selectors.userRoleNodes + report.dom.selectors.assistantRoleNodes;
   if (report.runtime.renderedTurnCount > 0 && semanticTurnNodes === 0) {
     push(checks, 'dom.turn-selectors', 'fail', 'Recorder reports rendered turns but no supported semantic turn selectors are present.');
   } else if (report.runtime.renderedTurnCount > 0) {
@@ -207,10 +197,7 @@ export function evaluateLiveQaEvidence(
     push(checks, 'dom.turn-selectors', 'warn', 'No rendered turns are present in this snapshot.');
   }
 
-  const stableIdNodes =
-    report.dom.selectors.turnIdNodes +
-    report.dom.selectors.messageIdNodes +
-    report.dom.selectors.conversationTurnTestIds;
+  const stableIdNodes = report.dom.selectors.turnIdNodes + report.dom.selectors.messageIdNodes + report.dom.selectors.conversationTurnTestIds;
   if (report.runtime.renderedTurnCount > 0 && stableIdNodes === 0) {
     push(checks, 'dom.stable-ids', 'warn', 'Rendered turns expose no observed stable-ID selector family; fallback identity needs manual review.');
   } else if (stableIdNodes > 0) {
@@ -253,6 +240,12 @@ export function evaluateLiveQaEvidence(
     push(checks, 'storage.confirmation', 'pass', 'Current page session has a confirmed persistence ACK.');
   }
 
+  if (report.archive.visibleActivityCount > 0 && report.archive.messageCount === 0) {
+    push(checks, 'archive.visible-activity', 'fail', 'Visible activity exists without an archived message.');
+  } else {
+    push(checks, 'archive.visible-activity', 'pass', `Archived visible-activity count is ${report.archive.visibleActivityCount}; text is excluded from this report.`);
+  }
+
   const structuralPass = !checks.some((check) => check.status === 'fail');
   return {
     schemaValid: true,
@@ -267,7 +260,8 @@ export function evaluateLiveQaEvidence(
       storageHealth: report.runtime.storageHealth,
       renderedTurnCount: report.runtime.renderedTurnCount,
       archiveMessageCount: report.archive.messageCount,
-      archiveEventCount: report.archive.eventCount
+      archiveEventCount: report.archive.eventCount,
+      archiveVisibleActivityCount: report.archive.visibleActivityCount
     }
   };
 }

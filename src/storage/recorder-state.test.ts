@@ -60,6 +60,36 @@ function turn(
   });
 }
 
+function assistantTurn(
+  providerTurnId: string,
+  plainText: string,
+  activityTexts: string[],
+  observedAt: string
+): ContentToBackgroundMessage {
+  return observation({
+    type: 'turn-upsert',
+    turn: {
+      providerId: 'chatgpt',
+      providerConversationId: identity.providerConversationId,
+      providerTurnId,
+      providerMessageId: providerTurnId,
+      role: 'assistant',
+      orderHint: 0,
+      plainText,
+      markdown: plainText,
+      partial: true,
+      visibleActivities: activityTexts.map((text, index) => ({
+        providerActivityId: `${providerTurnId}:visible:${index}`,
+        kind: index === 0 ? 'reasoning-summary' : 'tool',
+        text,
+        orderHint: index,
+        observedAt
+      })),
+      observedAt
+    }
+  });
+}
+
 function command(command: RecorderCommand, observedAt: string): RecorderCommandMessage {
   return {
     type: 'LLMCH_RECORDER_COMMAND',
@@ -124,6 +154,49 @@ describe('per-conversation recorder privacy policy', () => {
     expect(events.some((event) => event.type === 'recording-resumed')).toBe(true);
     expect(events.some((event) => event.type === 'turn-suppressed')).toBe(true);
     expect(JSON.stringify(events)).not.toContain('private omitted text');
+  });
+
+  it('does not backfill visible work that first appears while paused', async () => {
+    const repository = await createRepository();
+    await repository.persistObservation(
+      assistantTurn(
+        'assistant-visible',
+        'Same partial answer',
+        ['Thinking'],
+        '2026-09-16T11:30:00.000Z'
+      )
+    );
+
+    await repository.applyRecorderCommand(command('pause', '2026-09-16T11:30:01.000Z'));
+    await repository.persistObservation(
+      assistantTurn(
+        'assistant-visible',
+        'Same partial answer',
+        ['Thinking', 'Fetched private paused work'],
+        '2026-09-16T11:30:02.000Z'
+      )
+    );
+    await repository.applyRecorderCommand(command('resume', '2026-09-16T11:30:03.000Z'));
+
+    // The provider still renders that work after resume. It must remain suppressed.
+    await repository.persistObservation(
+      assistantTurn(
+        'assistant-visible',
+        'Final answer after resume',
+        ['Thinking', 'Fetched private paused work'],
+        '2026-09-16T11:30:04.000Z'
+      )
+    );
+
+    const [conversation] = await repository.listConversations();
+    const messages = await repository.listMessages(conversation!.id);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.plainText).toBe('Same partial answer');
+    expect(messages[0]?.visibleActivities?.map((activity) => activity.text)).toEqual(['Thinking']);
+
+    const events = await repository.listEvents(conversation!.id);
+    expect(events.filter((event) => event.type === 'turn-suppressed')).toHaveLength(1);
+    expect(JSON.stringify(events)).not.toContain('Fetched private paused work');
   });
 
   it('keeps stopped state durable and requires an explicit start', async () => {

@@ -11,6 +11,10 @@ LLM Chat History v0.1 is local-first. Core recording, browsing, search, export, 
 
 On supported ChatGPT pages, the content script reads rendered conversation structure and rendered user/assistant content needed to build the local archive. Provider page content is treated as untrusted input and is normalized into local records.
 
+When ChatGPT visibly shows additional response activity while it is working, v0.1 may also record that rendered activity. This includes visible reasoning summaries such as “Thinking”, visible tool/work steps, browsing/search/status text, interruption messages and other status text the user can actually see.
+
+The extension does **not** attempt to reveal, infer or extract hidden/private chain-of-thought, hidden system prompts, or other provider-internal data that is not rendered to the user. A saved “visible reasoning summary” means only text that appeared in the provider UI.
+
 The extension does not send prompts or messages on the user's behalf.
 
 ## What is stored locally
@@ -21,6 +25,8 @@ The canonical archive is stored in extension-owned IndexedDB and may contain:
 - provider title and optional user rename;
 - user and assistant message content;
 - normalized Markdown/plain text;
+- provider model labels only when visibly rendered;
+- visible reasoning summaries, work/tool steps and status text shown by the provider;
 - project/folder/tag metadata;
 - recording-state events;
 - checkpoints and checkpoint notes;
@@ -30,9 +36,9 @@ Recorder state is per conversation.
 
 ## Pause and Stop privacy semantics
 
-While a conversation is paused or stopped, newly observed content is not persisted as message content.
+While a conversation is paused or stopped, newly observed content is not persisted as message content **or visible activity content**.
 
-The archive records content-free suppression/state markers so a later DOM rescan cannot silently backfill omitted turns. Existing automated tests explicitly verify that paused/stopped text does not appear in archived messages or event payloads.
+The archive records content-free suppression/state markers so a later DOM rescan cannot silently backfill omitted turns or activity that first appeared while recording was paused/stopped. Existing automated tests explicitly verify that paused/stopped text and newly visible work activity do not appear in archived messages or event payloads after recording resumes.
 
 Minimizing or hiding the recorder UI does not pause or stop recording.
 
@@ -59,13 +65,15 @@ Disconnecting the folder prevents future mirror writes but does not erase files 
 
 ## Exports
 
-Markdown and JSON exports contain archived conversation content and metadata by design. They become ordinary files outside extension-managed storage and remain the user's responsibility after download.
+Markdown and JSON exports contain archived conversation content, visible provider activity, and metadata by design. They become ordinary files outside extension-managed storage and remain the user's responsibility after download.
+
+Markdown exports label this material as **visible activity** and explicitly state that hidden/private chain-of-thought is not available to the archive.
 
 Deleting a conversation from the Library does not erase previously downloaded exports.
 
 ## Diagnostics and performance reports
 
-Diagnostics and profiling exports are intentionally content-free/aggregate-only. They exclude message bodies, source URLs, conversation titles, checkpoint notes, project/folder names and tags.
+Diagnostics and profiling exports are intentionally content-free/aggregate-only. They exclude message bodies, visible activity text, source URLs, conversation titles, checkpoint notes, project/folder names and tags.
 
 ## Deletion scope
 
