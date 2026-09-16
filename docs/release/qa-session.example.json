@@ -1,0 +1,31 @@
+{
+  "schema": "llm-chat-history/release-qa-session",
+  "schemaVersion": 1,
+  "candidate": {
+    "commitSha": "b611c3936a8902246692d4cad2d128c6af971cdc",
+    "version": "0.1.0",
+    "unpackedArtifact": "llm-chat-history-unpacked-b611c3936a8902246692d4cad2d128c6af971cdc",
+    "unpackedArtifactSha256": "953650fb329547a9c30b607d9f6d12ac8e8b4f124333cb1fc2ae1fbe75bbf4fb",
+    "packagedArtifactSha256": "f854458c8e1812ef0f5b294df5a89a7b2834ffd4a7829c537b0c7e93019d57b8",
+    "ciRunId": 35117220444
+  },
+  "environment": {
+    "browser": "Chrome",
+    "browserVersion": "REPLACE_ME",
+    "os": "REPLACE_ME"
+  },
+  "testedAt": "REPLACE_WITH_ISO_8601_TIMESTAMP",
+  "tester": "REPLACE_ME",
+  "scenarios": [
+    { "id": 1, "status": "BLOCKED", "reports": ["scenario-01.json"], "notes": "Existing conversation baseline and Library persistence" },
+    { "id": 2, "status": "BLOCKED", "reports": ["scenario-02-before.json", "scenario-02-after.json"], "notes": "New chat provisional to stable identity" },
+    { "id": 3, "status": "BLOCKED", "reports": ["scenario-03-streaming.json", "scenario-03-final.json"], "notes": "Streaming finalization plus visible activity/model capture" },
+    { "id": 4, "status": "BLOCKED", "reports": ["scenario-04-a.json", "scenario-04-b.json", "scenario-04-a-return.json"], "notes": "SPA navigation isolation" },
+    { "id": 5, "status": "BLOCKED", "reports": ["scenario-05-before.json", "scenario-05-paused.json", "scenario-05-after.json"], "notes": "Pause/private/resume including visible-activity non-backfill" },
+    { "id": 6, "status": "BLOCKED", "reports": ["scenario-06-stopped.json", "scenario-06-restarted.json"], "notes": "Stop/start persistence" },
+    { "id": 7, "status": "BLOCKED", "reports": ["scenario-07-minimized.json", "scenario-07-hidden.json", "scenario-07-restored.json"], "notes": "Minimize/hide/move semantics and draggable position" },
+    { "id": 8, "status": "BLOCKED", "reports": ["scenario-08-before.json", "scenario-08-after-refresh.json"], "notes": "Refresh and MV3 recovery" },
+    { "id": 9, "status": "BLOCKED", "reports": ["scenario-09-before.json", "scenario-09-after-import.json", "scenario-09-after-rerun.json"], "notes": "Long-thread historical import" },
+    { "id": 10, "status": "BLOCKED", "reports": ["scenario-10.json"], "notes": "Library/search/export/theme/Ctrl+K/model/activity smoke test" }
+  ]
+}
