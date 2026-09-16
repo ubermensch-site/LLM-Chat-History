@@ -1,4 +1,9 @@
-import type { ProviderId, RecorderState, TurnRole } from '../shared/types';
+import type {
+  ProviderId,
+  RecorderState,
+  TurnRole,
+  VisibleActivityKind
+} from '../shared/types';
 
 export const ARCHIVE_DB_NAME = 'llm-chat-history';
 export const ARCHIVE_DB_VERSION = 2;
@@ -65,6 +70,15 @@ export interface ArchiveProject {
   updatedAt: string;
 }
 
+export interface ArchiveVisibleActivity {
+  providerActivityId: string;
+  kind: VisibleActivityKind;
+  text: string;
+  orderHint: number;
+  firstObservedAt: string;
+  lastObservedAt: string;
+}
+
 export interface ArchiveMessage {
   id: string;
   conversationId: string;
@@ -78,6 +92,8 @@ export interface ArchiveMessage {
   partial: boolean;
   /** Provider model label only when that label was visibly rendered in the provider UI. */
   modelLabel?: string | null;
+  /** Cumulative provider-visible work/reasoning/status entries observed for this response. */
+  visibleActivities?: ArchiveVisibleActivity[];
   contentHash: string;
   firstObservedAt: string;
   lastObservedAt: string;
