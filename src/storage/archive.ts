@@ -24,6 +24,7 @@ import {
   type ArchiveEventType,
   type ArchiveMessage
 } from './schema';
+import { reconcileObservedTurnOrder } from './turn-order';
 
 interface ConversationResolution {
   conversation: ArchiveConversation;
@@ -308,7 +309,10 @@ export class ArchiveRepository {
       providerTurnId: turn.providerTurnId,
       providerMessageId: turn.providerMessageId,
       role: turn.role,
-      orderHint: turn.orderHint,
+      // DOM indexes are window-local under virtualization. Once a stable turn has
+      // entered the archive, never overwrite its canonical order with a later
+      // virtualized-window index. Snapshot reconciliation below updates ordering.
+      orderHint: existing?.orderHint ?? turn.orderHint,
       plainText: turn.plainText,
       markdown: turn.markdown,
       partial: turn.partial,
@@ -356,6 +360,76 @@ export class ArchiveRepository {
     return state;
   }
 
+  private async reconcileSnapshotOrder(
+    conversationId: string,
+    previous: ArchiveMessage[],
+    turns: ProviderTurnObservation[]
+  ): Promise<void> {
+    const current = await this.listMessages(conversationId);
+    const currentById = new Map(current.map((message) => [message.id, message] as const));
+    const observedStoredIds = turns
+      .map((turn) => messageId(conversationId, turn.providerTurnId))
+      .filter((id) => currentById.has(id));
+    const orderedIds = reconcileObservedTurnOrder(
+      previous.map((message) => message.id),
+      observedStoredIds
+    );
+
+    // Include any current record that was not represented by the prior canonical
+    // order or this visible snapshot. This is defensive for mixed old/new clients.
+    for (const message of current) {
+      if (!orderedIds.includes(message.id)) orderedIds.push(message.id);
+    }
+
+    const transaction = this.db.transaction(STORES.messages, 'readwrite');
+    const store = transaction.objectStore(STORES.messages);
+    orderedIds.forEach((id, orderHint) => {
+      const message = currentById.get(id);
+      if (!message || message.orderHint === orderHint) return;
+      store.put({ ...message, orderHint } satisfies ArchiveMessage);
+    });
+    await transactionDone(transaction);
+  }
+
+  private async persistTurnSnapshot(
+    message: ContentToBackgroundMessage,
+    turns: ProviderTurnObservation[]
+  ): Promise<RecorderState | null> {
+    if (!turns.length) return null;
+
+    const first = turns[0]!;
+    const identity: ProviderConversationIdentity = {
+      providerId: first.providerId,
+      providerConversationId: first.providerConversationId,
+      sourceUrl: message.pageUrl,
+      provisional: first.providerConversationId === null
+    };
+    const resolution = await this.resolveConversation({
+      identity,
+      sourceSessionId: message.sourceSessionId,
+      observedAt: message.observation.type === 'turn-snapshot'
+        ? message.observation.observedAt
+        : first.observedAt
+    });
+    await this.recordResolutionEvents(
+      resolution,
+      message.observation.type === 'turn-snapshot'
+        ? message.observation.observedAt
+        : first.observedAt
+    );
+
+    const previous = await this.listMessages(resolution.conversation.id);
+    let state: RecorderState = resolution.conversation.recordingState;
+    for (const turn of turns) {
+      state = await this.persistTurn(message, turn);
+    }
+
+    if (state === 'recording') {
+      await this.reconcileSnapshotOrder(resolution.conversation.id, previous, turns);
+    }
+    return state;
+  }
+
   private async persistHealth(message: ContentToBackgroundMessage): Promise<void> {
     if (message.observation.type !== 'health') return;
     await this.appendEvent(
@@ -374,6 +448,8 @@ export class ArchiveRepository {
         return this.persistConversationObservation(message);
       case 'turn-upsert':
         return this.persistTurn(message, message.observation.turn);
+      case 'turn-snapshot':
+        return this.persistTurnSnapshot(message, message.observation.turns);
       case 'health':
         await this.persistHealth(message);
         return null;
