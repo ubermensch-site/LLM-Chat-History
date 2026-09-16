@@ -13,6 +13,13 @@ import {
 
 export type StorageHealthState = 'unknown' | 'healthy' | 'error';
 
+export interface HistoricalImportSummary {
+  windowsScanned: number;
+  uniqueTurnsSeen: number;
+  complete: boolean;
+  truncated: boolean;
+}
+
 export interface RecorderPillState {
   health: AdapterHealthState;
   healthCode: string | null;
@@ -26,6 +33,7 @@ export interface RecorderPillState {
 export interface RecorderPillOptions {
   onCommand?: (command: RecorderCommand) => void | Promise<void>;
   onCheckpoint?: (name: string, note: string | null) => void | Promise<void>;
+  onImportHistory?: () => Promise<HistoricalImportSummary>;
   onOpenLibrary?: () => void | Promise<void>;
 }
 
@@ -89,11 +97,12 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     }
     .adapter-health.degraded { background: #fff3e0; color: #6d4c00; }
     .adapter-health.error { background: #f9dedc; color: #8c1d18; }
-    .storage {
+    .storage, .history-status {
       margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f3edf7;
       font-size: 11px; line-height: 1.35; color: #49454f;
     }
-    .storage.error { background: #f9dedc; color: #8c1d18; }
+    .storage.error, .history-status.error { background: #f9dedc; color: #8c1d18; }
+    .history-status[hidden] { display: none; }
     .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
     .action {
       border: 1px solid #79747e; background: #fffbfe; color: #49454f;
@@ -141,6 +150,10 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
   const storage = document.createElement('div');
   storage.className = 'storage';
   storage.setAttribute('aria-live', 'polite');
+  const historyStatus = document.createElement('div');
+  historyStatus.className = 'history-status';
+  historyStatus.setAttribute('aria-live', 'polite');
+  historyStatus.hidden = true;
 
   const actions = document.createElement('div');
   actions.className = 'actions';
@@ -152,6 +165,14 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
   checkpoint.className = 'action';
   checkpoint.textContent = 'Checkpoint';
   checkpoint.setAttribute('aria-label', 'Add a named checkpoint to this local conversation archive');
+  const importHistory = document.createElement('button');
+  importHistory.type = 'button';
+  importHistory.className = 'action';
+  importHistory.textContent = 'Import history';
+  importHistory.setAttribute(
+    'aria-label',
+    'Scroll through this ChatGPT conversation and import older rendered history into the local archive'
+  );
   const stop = document.createElement('button');
   stop.type = 'button';
   stop.className = 'action danger';
@@ -163,9 +184,9 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
 
   const hint = document.createElement('div');
   hint.className = 'hint';
-  hint.textContent = 'Minimize or Hide only changes this UI. Recording stops only after explicit Stop confirmation. Checkpoints are explicit local notes and can be added while paused or stopped. Click the extension toolbar icon to restore a hidden recorder.';
-  actions.append(primary, checkpoint, stop, library);
-  panel.append(header, meta, adapterHealth, storage, actions, hint);
+  hint.textContent = 'Minimize or Hide only changes this UI. Recording stops only after explicit Stop confirmation. Import history is manual: it scrolls the current chat, captures rendered older turns through the same local archive, then restores your position. It is available only while recording.';
+  actions.append(primary, checkpoint, importHistory, stop, library);
+  panel.append(header, meta, adapterHealth, storage, historyStatus, actions, hint);
 
   const pill = document.createElement('button');
   pill.type = 'button';
@@ -189,6 +210,8 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
   };
   let visibility: RecorderVisibility = 'collapsed';
   let busy = false;
+  let historyMessage: string | null = null;
+  let historyError = false;
   let stopConfirmation: StopConfirmationState = { deadlineMs: null };
   let stopResetTimer: number | null = null;
 
@@ -246,6 +269,9 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     adapterHealth.textContent = adapterLabel();
     storage.className = `storage${state.storageHealth === 'error' ? ' error' : ''}`;
     storage.textContent = storageLabel();
+    historyStatus.hidden = !historyMessage;
+    historyStatus.className = `history-status${historyError ? ' error' : ''}`;
+    historyStatus.textContent = historyMessage ?? '';
 
     if (state.recordingState === 'recording') {
       primary.textContent = 'Pause';
@@ -268,6 +294,11 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
 
     primary.disabled = busy;
     checkpoint.disabled = busy || !options.onCheckpoint;
+    importHistory.disabled =
+      busy ||
+      state.recordingState !== 'recording' ||
+      state.health === 'error' ||
+      !options.onImportHistory;
     stop.disabled = busy || state.recordingState === 'stopped';
     library.disabled = busy;
   };
@@ -298,6 +329,32 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
       await options.onCheckpoint(name.trim(), note.trim() || null);
     } catch {
       // The content-script transport updates visible health state; avoid an unhandled UI promise.
+    } finally {
+      busy = false;
+      render();
+    }
+  };
+
+  const importHistoricalTurns = async () => {
+    if (!options.onImportHistory || busy || state.recordingState !== 'recording') return;
+    const confirmed = window.confirm(
+      'Import older history? LLM Chat History will temporarily scroll through this conversation, capture rendered older turns into the local archive, and then restore your position.'
+    );
+    if (!confirmed) return;
+
+    busy = true;
+    historyError = false;
+    historyMessage = 'Importing older rendered history…';
+    render();
+    try {
+      const result = await options.onImportHistory();
+      historyError = !result.complete;
+      historyMessage = result.complete
+        ? `History import complete · ${result.uniqueTurnsSeen} turns seen across ${result.windowsScanned} windows.`
+        : `History import stopped at the safety limit · ${result.uniqueTurnsSeen} turns seen. You can run it again.`;
+    } catch (error) {
+      historyError = true;
+      historyMessage = `History import failed: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
       busy = false;
       render();
@@ -341,6 +398,9 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
   });
   checkpoint.addEventListener('click', () => {
     void createCheckpoint();
+  });
+  importHistory.addEventListener('click', () => {
+    void importHistoricalTurns();
   });
   stop.addEventListener('click', armOrConfirmStop);
   library.addEventListener('click', () => {
