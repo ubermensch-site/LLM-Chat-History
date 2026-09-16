@@ -1,8 +1,14 @@
 import { exportFilename, renderJsonExport, renderMarkdownExport } from '../export/export';
 import { parseJsonArchiveExport } from '../import/json-import';
 import { ArchiveRepository } from '../storage/archive';
+import { conversationDisplayTitle } from '../storage/conversation';
 import { openArchiveDb } from '../storage/db';
 import { importArchiveBundle } from '../storage/import';
+import {
+  deleteConversationCascade,
+  renameConversation,
+  setConversationArchived
+} from '../storage/library-management';
 import type { ArchiveConversation, ArchiveMessage } from '../storage/schema';
 import { filterLibraryRecords, type LibraryRecord } from './search';
 
@@ -37,20 +43,47 @@ const downloadMarkdown = byId<HTMLButtonElement>('download-md');
 const downloadJson = byId<HTMLButtonElement>('download-json');
 const importJson = byId<HTMLButtonElement>('import-json');
 const importFile = byId<HTMLInputElement>('import-file');
-const importStatus = byId<HTMLParagraphElement>('import-status');
+const libraryStatus = byId<HTMLParagraphElement>('library-status');
+const viewActive = byId<HTMLButtonElement>('view-active');
+const viewArchived = byId<HTMLButtonElement>('view-archived');
+const renameButton = byId<HTMLButtonElement>('rename-chat');
+const archiveButton = byId<HTMLButtonElement>('archive-chat');
+const deleteButton = byId<HTMLButtonElement>('delete-chat');
 
 let database: IDBDatabase;
 let repository: ArchiveRepository;
 let records: LibraryRecord[] = [];
 let selectedConversationId: string | null = null;
+let showingArchived = false;
+let deleteDeadlineMs: number | null = null;
+let deleteResetTimer: ReturnType<typeof setTimeout> | null = null;
 
 function selectedRecord(): LibraryRecord | undefined {
   return records.find((record) => record.conversation.id === selectedConversationId);
 }
 
-function setImportStatus(message: string, error = false): void {
-  importStatus.textContent = message;
-  importStatus.classList.toggle('error', error);
+function recordBelongsInCurrentView(record: LibraryRecord): boolean {
+  return showingArchived ? Boolean(record.conversation.archivedAt) : !record.conversation.archivedAt;
+}
+
+function recordsInCurrentView(): LibraryRecord[] {
+  return records.filter(recordBelongsInCurrentView);
+}
+
+function setLibraryStatus(message: string, error = false): void {
+  libraryStatus.textContent = message;
+  libraryStatus.classList.toggle('error', error);
+}
+
+function resetDeleteConfirmation(): void {
+  deleteDeadlineMs = null;
+  if (deleteResetTimer) clearTimeout(deleteResetTimer);
+  deleteResetTimer = null;
+  renderManagementActions();
+}
+
+function deleteIsArmed(now = Date.now()): boolean {
+  return deleteDeadlineMs !== null && now <= deleteDeadlineMs;
 }
 
 function setEmptyTranscript(message: string): void {
@@ -61,13 +94,26 @@ function setEmptyTranscript(message: string): void {
   transcript.append(empty);
 }
 
+function renderManagementActions(): void {
+  const record = selectedRecord();
+  const disabled = !record;
+  renameButton.disabled = disabled;
+  archiveButton.disabled = disabled;
+  deleteButton.disabled = disabled;
+  downloadMarkdown.disabled = disabled;
+  downloadJson.disabled = disabled;
+  archiveButton.textContent = record?.conversation.archivedAt ? 'Unarchive' : 'Archive';
+  deleteButton.textContent = deleteIsArmed() ? 'Confirm delete' : 'Delete';
+  deleteButton.classList.toggle('danger-armed', deleteIsArmed());
+}
+
 function renderTranscript(record: LibraryRecord): void {
   const conversation = record.conversation;
-  title.textContent = conversation.title || 'Untitled conversation';
-  meta.textContent = `${conversation.providerId} · ${conversation.messageCount} messages · ${conversation.recordingState} · Last captured ${humanDate(conversation.lastObservedAt)}`;
-  downloadMarkdown.disabled = false;
-  downloadJson.disabled = false;
+  title.textContent = conversationDisplayTitle(conversation);
+  const archived = conversation.archivedAt ? ` · Archived ${humanDate(conversation.archivedAt)}` : '';
+  meta.textContent = `${conversation.providerId} · ${conversation.messageCount} messages · ${conversation.recordingState} · Last captured ${humanDate(conversation.lastObservedAt)}${archived}`;
   transcript.replaceChildren();
+  renderManagementActions();
 
   if (record.messages.length === 0) {
     setEmptyTranscript('No captured turns are stored for this conversation yet.');
@@ -104,8 +150,17 @@ function renderTranscript(record: LibraryRecord): void {
   }
 }
 
+function clearSelection(message: string): void {
+  selectedConversationId = null;
+  title.textContent = showingArchived ? 'Archived conversations' : 'Local archive';
+  meta.textContent = message;
+  renderManagementActions();
+  setEmptyTranscript(message);
+}
+
 function selectConversation(id: string): void {
   selectedConversationId = id;
+  resetDeleteConfirmation();
   renderConversationList();
   const record = selectedRecord();
   if (record) renderTranscript(record);
@@ -119,7 +174,7 @@ function conversationButton(conversation: ArchiveConversation): HTMLButtonElemen
 
   const name = document.createElement('span');
   name.className = 'conversation-title';
-  name.textContent = conversation.title || 'Untitled conversation';
+  name.textContent = conversationDisplayTitle(conversation);
 
   const details = document.createElement('span');
   details.className = 'conversation-meta';
@@ -131,21 +186,31 @@ function conversationButton(conversation: ArchiveConversation): HTMLButtonElemen
 }
 
 function renderConversationList(): void {
-  const visible = filterLibraryRecords(records, searchInput.value);
+  const inView = recordsInCurrentView();
+  const visible = filterLibraryRecords(inView, searchInput.value);
   count.textContent = searchInput.value.trim()
-    ? `${visible.length} of ${records.length} conversations`
-    : `${records.length} conversations`;
+    ? `${visible.length} of ${inView.length} ${showingArchived ? 'archived' : 'active'} conversations`
+    : `${inView.length} ${showingArchived ? 'archived' : 'active'} conversations`;
   list.replaceChildren(...visible.map((record) => conversationButton(record.conversation)));
 
-  if (visible.length === 0 && records.length > 0) {
+  viewActive.classList.toggle('selected', !showingArchived);
+  viewArchived.classList.toggle('selected', showingArchived);
+  viewActive.setAttribute('aria-pressed', String(!showingArchived));
+  viewArchived.setAttribute('aria-pressed', String(showingArchived));
+
+  if (visible.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'count';
-    empty.textContent = 'No local archive matches this search.';
+    empty.textContent = inView.length
+      ? 'No conversations in this view match the search.'
+      : showingArchived
+        ? 'No archived conversations.'
+        : 'No active conversations.';
     list.append(empty);
   }
 }
 
-async function loadRecords(): Promise<void> {
+async function loadRecords(preferredSelectionId: string | null = selectedConversationId): Promise<void> {
   const conversations = await repository.listConversations();
   records = await Promise.all(
     conversations.map(async (conversation) => ({
@@ -154,15 +219,23 @@ async function loadRecords(): Promise<void> {
     }))
   );
 
+  const inView = recordsInCurrentView();
+  const preferred = preferredSelectionId
+    ? inView.find((record) => record.conversation.id === preferredSelectionId)
+    : undefined;
+  const next = preferred ?? inView[0];
+  selectedConversationId = next?.conversation.id ?? null;
   renderConversationList();
-  if (!selectedConversationId && records[0]) selectConversation(records[0].conversation.id);
-  if (records.length === 0) {
-    count.textContent = '0 conversations';
-    title.textContent = 'Local archive';
-    meta.textContent = 'No conversations have been captured yet.';
-    downloadMarkdown.disabled = true;
-    downloadJson.disabled = true;
-    setEmptyTranscript('Your locally recorded conversations will appear here.');
+
+  if (next) renderTranscript(next);
+  else {
+    clearSelection(
+      showingArchived
+        ? 'Archived conversations will appear here.'
+        : records.length
+          ? 'All saved conversations are currently archived.'
+          : 'Your locally recorded conversations will appear here.'
+    );
   }
 }
 
@@ -182,28 +255,108 @@ async function currentBundle(): Promise<{
 
 async function importSelectedFile(file: File): Promise<void> {
   importJson.disabled = true;
-  setImportStatus(`Validating ${file.name}…`);
+  setLibraryStatus(`Validating ${file.name}…`);
   try {
     const parsed = parseJsonArchiveExport(await file.text());
     const result = await importArchiveBundle(database, parsed);
-    await loadRecords();
-    selectConversation(result.conversationId);
+    showingArchived = Boolean(parsed.conversation.archivedAt);
+    await loadRecords(result.conversationId);
     const action = result.created ? 'Imported' : 'Merged';
-    setImportStatus(
-      `${action} ${parsed.conversation.title || 'Untitled conversation'} · ${result.messagesAdded} messages added${
+    setLibraryStatus(
+      `${action} ${conversationDisplayTitle(parsed.conversation)} · ${result.messagesAdded} messages added${
         result.messagesUpdated ? ` · ${result.messagesUpdated} updated` : ''
       }`
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[LLM Chat History] JSON import failed', error);
-    setImportStatus(`Import failed: ${message}`, true);
+    setLibraryStatus(`Import failed: ${message}`, true);
   } finally {
     importJson.disabled = false;
   }
 }
 
+async function renameSelectedConversation(): Promise<void> {
+  const record = selectedRecord();
+  if (!record) return;
+  const current = conversationDisplayTitle(record.conversation);
+  const next = window.prompt(
+    'Rename this conversation. Leave blank to use the provider title again.',
+    current
+  );
+  if (next === null) return;
+
+  const updated = await renameConversation(database, record.conversation.id, next || null);
+  await loadRecords(updated.id);
+  setLibraryStatus(
+    updated.customTitle
+      ? `Renamed to “${updated.customTitle}”.`
+      : 'Custom name cleared; provider title restored.'
+  );
+}
+
+async function toggleArchiveSelectedConversation(): Promise<void> {
+  const record = selectedRecord();
+  if (!record) return;
+  const shouldArchive = !record.conversation.archivedAt;
+  const name = conversationDisplayTitle(record.conversation);
+  await setConversationArchived(database, record.conversation.id, shouldArchive);
+  selectedConversationId = null;
+  await loadRecords(null);
+  setLibraryStatus(`${shouldArchive ? 'Archived' : 'Unarchived'} “${name}”.`);
+}
+
+async function deleteSelectedConversation(): Promise<void> {
+  const record = selectedRecord();
+  if (!record) return;
+
+  if (!deleteIsArmed()) {
+    deleteDeadlineMs = Date.now() + 5_000;
+    renderManagementActions();
+    setLibraryStatus('Press Confirm delete within 5 seconds to permanently remove this local copy.');
+    if (deleteResetTimer) clearTimeout(deleteResetTimer);
+    deleteResetTimer = setTimeout(() => {
+      resetDeleteConfirmation();
+      setLibraryStatus('Delete confirmation expired.');
+    }, 5_100);
+    return;
+  }
+
+  const name = conversationDisplayTitle(record.conversation);
+  resetDeleteConfirmation();
+  await deleteConversationCascade(database, record.conversation.id);
+  selectedConversationId = null;
+  await loadRecords(null);
+  setLibraryStatus(`Deleted “${name}” and its local messages/events.`);
+}
+
 searchInput.addEventListener('input', renderConversationList);
+viewActive.addEventListener('click', () => {
+  showingArchived = false;
+  resetDeleteConfirmation();
+  void loadRecords(null);
+});
+viewArchived.addEventListener('click', () => {
+  showingArchived = true;
+  resetDeleteConfirmation();
+  void loadRecords(null);
+});
+renameButton.addEventListener('click', () => {
+  void renameSelectedConversation().catch((error: unknown) => {
+    setLibraryStatus(error instanceof Error ? error.message : String(error), true);
+  });
+});
+archiveButton.addEventListener('click', () => {
+  void toggleArchiveSelectedConversation().catch((error: unknown) => {
+    setLibraryStatus(error instanceof Error ? error.message : String(error), true);
+  });
+});
+deleteButton.addEventListener('click', () => {
+  void deleteSelectedConversation().catch((error: unknown) => {
+    resetDeleteConfirmation();
+    setLibraryStatus(error instanceof Error ? error.message : String(error), true);
+  });
+});
 
 downloadMarkdown.addEventListener('click', () => {
   void currentBundle().then((bundle) => {
@@ -245,7 +398,10 @@ void openArchiveDb()
     title.textContent = 'Unable to open local archive';
     meta.textContent = error instanceof Error ? error.message : String(error);
     importJson.disabled = true;
-    setImportStatus('Import unavailable while local storage is inaccessible.', true);
+    renameButton.disabled = true;
+    archiveButton.disabled = true;
+    deleteButton.disabled = true;
+    setLibraryStatus('Library actions are unavailable while local storage is inaccessible.', true);
     setEmptyTranscript(
       'The local archive could not be opened. Reload this page after resolving the storage error.'
     );
