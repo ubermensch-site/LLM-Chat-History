@@ -14,7 +14,8 @@ const buildOptions = {
   absWorkingDir: root,
   entryPoints: {
     content: 'src/content/index.ts',
-    background: 'src/background/index.ts'
+    background: 'src/background/index.ts',
+    library: 'src/library/index.ts'
   },
   bundle: true,
   outdir: 'dist',

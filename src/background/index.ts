@@ -2,6 +2,7 @@ import type {
   BackgroundAck,
   ContentToBackgroundMessage,
   ContentToBackgroundRequest,
+  OpenLibraryMessage,
   RecorderCommandMessage
 } from '../shared/types';
 import { ArchiveRepository } from '../storage/archive';
@@ -50,16 +51,48 @@ function isRecorderCommandMessage(value: unknown): value is RecorderCommandMessa
   );
 }
 
+function isOpenLibraryMessage(value: unknown): value is OpenLibraryMessage {
+  return Boolean(
+    value &&
+      typeof value === 'object' &&
+      (value as Partial<OpenLibraryMessage>).type === 'LLMCH_OPEN_LIBRARY'
+  );
+}
+
 function isKnownRequest(value: unknown): value is ContentToBackgroundRequest {
-  return isProviderObservationMessage(value) || isRecorderCommandMessage(value);
+  return (
+    isProviderObservationMessage(value) ||
+    isRecorderCommandMessage(value) ||
+    isOpenLibraryMessage(value)
+  );
+}
+
+async function openLibrary(): Promise<void> {
+  await chrome.tabs.create({ url: chrome.runtime.getURL('library.html') });
 }
 
 chrome.runtime.onInstalled.addListener(() => {
   console.info('[LLM Chat History] extension installed');
 });
 
+chrome.action.onClicked.addListener(() => {
+  void openLibrary().catch((error: unknown) => {
+    console.error('[LLM Chat History] unable to open archive library', error);
+  });
+});
+
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (!isKnownRequest(message)) return;
+
+  if (message.type === 'LLMCH_OPEN_LIBRARY') {
+    void openLibrary()
+      .then(() => sendResponse({ ok: true } satisfies BackgroundAck))
+      .catch((error: unknown) => {
+        const text = error instanceof Error ? error.message : String(error);
+        sendResponse({ ok: false, error: text } satisfies BackgroundAck);
+      });
+    return true;
+  }
 
   void getRepository()
     .then(async (repository) => {

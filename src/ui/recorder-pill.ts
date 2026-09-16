@@ -13,6 +13,7 @@ export interface RecorderPillState {
 
 export interface RecorderPillOptions {
   onCommand?: (command: RecorderCommand) => void | Promise<void>;
+  onOpenLibrary?: () => void | Promise<void>;
 }
 
 const HOST_ID = 'llm-chat-history-recorder-host';
@@ -50,7 +51,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): {
     .dot.stopped { background: #79747e; }
     .dot.error { background: #b3261e; }
     .panel {
-      width: 272px; margin-bottom: 8px; padding: 14px; border-radius: 16px;
+      width: 292px; margin-bottom: 8px; padding: 14px; border-radius: 16px;
       background: #fffbfe; color: #1d1b20; box-shadow: 0 4px 18px rgba(0,0,0,.22);
       border: 1px solid #cac4d0;
     }
@@ -102,10 +103,15 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): {
   stop.type = 'button';
   stop.className = 'action danger';
   stop.textContent = 'Stop';
+  const library = document.createElement('button');
+  library.type = 'button';
+  library.className = 'action';
+  library.textContent = 'Library';
+  library.setAttribute('aria-label', 'Open local chat archive library');
   const hint = document.createElement('div');
   hint.className = 'hint';
   hint.textContent = 'Minimizing this panel never changes recording state.';
-  actions.append(primary, stop);
+  actions.append(primary, stop, library);
   panel.append(header, meta, actions, hint);
 
   const pill = document.createElement('button');
@@ -166,6 +172,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): {
 
     primary.disabled = busy;
     stop.disabled = busy || state.recordingState === 'stopped';
+    library.disabled = busy;
   };
 
   const runCommand = async (command: RecorderCommand) => {
@@ -193,6 +200,10 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): {
     if (command) void runCommand(command);
   });
   stop.addEventListener('click', () => void runCommand('stop'));
+  library.addEventListener('click', () => {
+    if (!options.onOpenLibrary || busy) return;
+    void options.onOpenLibrary();
+  });
 
   render();
 
