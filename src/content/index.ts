@@ -7,6 +7,7 @@ import type {
   RecorderCommand,
   RecorderCommandMessage
 } from '../shared/types';
+import { withRetry } from '../transport/retry';
 import { mountRecorderPill } from '../ui/recorder-pill';
 
 const adapter = new ChatGptAdapter();
@@ -29,15 +30,31 @@ function observationConversationKey(observation: ProviderObservation): string | 
 }
 
 function applyAck(ack: BackgroundAck | undefined): void {
-  if (!ack) return;
+  if (!ack) throw new Error('Background did not acknowledge the request');
   if (!ack.ok) throw new Error(ack.error ?? 'Background persistence failed');
   if (ack.recordingState) pill.update({ recordingState: ack.recordingState });
+}
+
+async function sendRequest(
+  message: ContentToBackgroundMessage | RecorderCommandMessage,
+  retry: boolean
+): Promise<void> {
+  const operation = async () => {
+    const ack = (await chrome.runtime.sendMessage(message)) as BackgroundAck | undefined;
+    applyAck(ack);
+  };
+
+  if (retry) {
+    await withRetry(operation);
+  } else {
+    await operation();
+  }
 }
 
 async function openLibrary(): Promise<void> {
   const message: OpenLibraryMessage = { type: 'LLMCH_OPEN_LIBRARY' };
   const ack = (await chrome.runtime.sendMessage(message)) as BackgroundAck | undefined;
-  if (ack && !ack.ok) throw new Error(ack.error ?? 'Unable to open archive library');
+  applyAck(ack);
 }
 
 async function sendRecorderCommand(command: RecorderCommand): Promise<void> {
@@ -47,6 +64,7 @@ async function sendRecorderCommand(command: RecorderCommand): Promise<void> {
 
   const message: RecorderCommandMessage = {
     type: 'LLMCH_RECORDER_COMMAND',
+    requestId: crypto.randomUUID(),
     providerId: adapter.providerId,
     sourceSessionId,
     pageUrl: location.href,
@@ -56,11 +74,10 @@ async function sendRecorderCommand(command: RecorderCommand): Promise<void> {
   };
 
   try {
-    const ack = (await chrome.runtime.sendMessage(message)) as BackgroundAck | undefined;
-    applyAck(ack);
+    await sendRequest(message, true);
   } catch (error) {
     pill.update({ health: 'error' });
-    console.warn('[LLM Chat History] recorder command failed', error);
+    console.warn('[LLM Chat History] recorder command failed after retries', error);
     throw error;
   }
 }
@@ -89,13 +106,10 @@ function enqueueObservation(observation: ProviderObservation): void {
   };
 
   sendQueue = sendQueue
-    .then(async () => {
-      const ack = (await chrome.runtime.sendMessage(message)) as BackgroundAck | undefined;
-      applyAck(ack);
-    })
+    .then(() => sendRequest(message, observation.type !== 'health'))
     .catch((error: unknown) => {
       pill.update({ health: 'error' });
-      console.warn('[LLM Chat History] observation persistence failed', error);
+      console.warn('[LLM Chat History] observation persistence failed after retries', error);
     });
 }
 

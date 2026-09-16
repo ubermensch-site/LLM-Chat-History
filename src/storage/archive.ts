@@ -51,6 +51,17 @@ function suppressedTurnEventId(conversationId: string, providerTurnId: string): 
   return `suppressed:${conversationId}:${encodeURIComponent(providerTurnId)}`;
 }
 
+function recorderCommandEventId(requestId: string): string {
+  return `recorder-command:${encodeURIComponent(requestId)}`;
+}
+
+function recorderStateFromEvent(event: ArchiveEvent | undefined): RecorderState | null {
+  const value = event?.data.to;
+  return value === 'recording' || value === 'paused' || value === 'stopped' || value === 'error'
+    ? value
+    : null;
+}
+
 export class ArchiveRepository {
   constructor(private readonly db: IDBDatabase) {}
 
@@ -368,6 +379,16 @@ export class ArchiveRepository {
   }
 
   async applyRecorderCommand(message: RecorderCommandMessage): Promise<RecorderState> {
+    const eventId = recorderCommandEventId(message.requestId);
+    const readTransaction = this.db.transaction(STORES.events, 'readonly');
+    const priorEvent = await requestToPromise<ArchiveEvent | undefined>(
+      readTransaction.objectStore(STORES.events).get(eventId)
+    );
+    await transactionDone(readTransaction);
+
+    const priorState = recorderStateFromEvent(priorEvent);
+    if (priorState) return priorState;
+
     const resolution = await this.resolveConversation({
       identity: message.identity,
       sourceSessionId: message.sourceSessionId,
@@ -377,6 +398,8 @@ export class ArchiveRepository {
 
     const current = resolution.conversation.recordingState;
     const next = transitionRecorderState(current, message.command);
+    if (next === current) return current;
+
     const updated: ArchiveConversation = {
       ...resolution.conversation,
       recordingState: next,
@@ -388,11 +411,18 @@ export class ArchiveRepository {
     const transaction = this.db.transaction([STORES.conversations, STORES.events], 'readwrite');
     transaction.objectStore(STORES.conversations).put(updated);
     transaction.objectStore(STORES.events).put(
-      archiveEvent(updated.id, recorderEventTypeForCommand(message.command), message.observedAt, {
-        from: current,
-        to: next,
-        command: message.command
-      })
+      archiveEvent(
+        updated.id,
+        recorderEventTypeForCommand(message.command),
+        message.observedAt,
+        {
+          from: current,
+          to: next,
+          command: message.command,
+          requestId: message.requestId
+        },
+        eventId
+      )
     );
     await transactionDone(transaction);
     return next;

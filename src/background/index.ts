@@ -45,6 +45,8 @@ function isRecorderCommandMessage(value: unknown): value is RecorderCommandMessa
   const candidate = value as Partial<RecorderCommandMessage>;
   return (
     candidate.type === 'LLMCH_RECORDER_COMMAND' &&
+    typeof candidate.requestId === 'string' &&
+    candidate.requestId.length > 0 &&
     Boolean(candidate.identity && typeof candidate.identity === 'object') &&
     typeof candidate.observedAt === 'string' &&
     ['pause', 'resume', 'stop', 'start'].includes(candidate.command ?? '')

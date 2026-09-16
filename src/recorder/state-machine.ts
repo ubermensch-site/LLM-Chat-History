@@ -18,13 +18,16 @@ export function transitionRecorderState(
     case 'recording':
       if (command === 'pause') return 'paused';
       if (command === 'stop') return 'stopped';
+      if (command === 'resume' || command === 'start') return 'recording';
       break;
     case 'paused':
       if (command === 'resume') return 'recording';
       if (command === 'stop') return 'stopped';
+      if (command === 'pause') return 'paused';
       break;
     case 'stopped':
       if (command === 'start') return 'recording';
+      if (command === 'stop') return 'stopped';
       break;
     case 'error':
       if (command === 'start') return 'recording';

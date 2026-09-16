@@ -63,6 +63,7 @@ function turn(
 function command(command: RecorderCommand, observedAt: string): RecorderCommandMessage {
   return {
     type: 'LLMCH_RECORDER_COMMAND',
+    requestId: `state-test:${command}:${observedAt}`,
     providerId: 'chatgpt',
     sourceSessionId: 'state-session',
     pageUrl,
