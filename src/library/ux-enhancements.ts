@@ -122,7 +122,29 @@ const COPY_REPLACEMENTS = new Map<string, string>([
   ['Choose another', 'Choose another folder'],
   ['Disconnect', 'Stop folder copies'],
   ['Validate QA report', 'Check a test report'],
-  ['Download summary', 'Download safe test summary']
+  ['Download summary', 'Download safe test summary'],
+  [
+    'Download provider health metadata only. Chat titles, URLs, prompts, answers, checkpoint notes and message bodies are excluded.',
+    'Use this only if something is not saving correctly. The file contains health checks, not your chat messages, chat names, website addresses, bookmarks, or notes.'
+  ],
+  [
+    'Run an on-demand local profile. The report contains counts, byte estimates and timing summaries only—not chat text, titles, URLs, notes or search queries.',
+    'Check how much space your saved chats use and how quickly this extension is working. The check stays on this computer and does not include your chat text, chat names, website addresses, notes, or searches.'
+  ],
+  [
+    'Validate a privacy-safe QA report locally. Nothing is uploaded. One report checks structural consistency only; scenario-level PASS still follows the live QA checklist.',
+    'Choose a test report downloaded by this extension. It is checked on this computer and is never uploaded. This tells you whether the report looks healthy; it does not replace the full browser test.'
+  ],
+  [
+    'Optional Markdown mirror. Your browser IndexedDB archive remains canonical; mirror failures never stop local capture.',
+    'Optional: keep readable copies in a folder you choose. Your chats are still saved in the browser even if folder copying fails or is turned off.'
+  ],
+  ['No profile has been run in this Library session.', 'No storage & speed check has been run yet.'],
+  ['Choose a llm-chat-history-live-qa JSON file.', 'Choose a test report file you downloaded from the recorder.'],
+  ['No automatic mirror write has been recorded yet.', 'No folder copy has been made yet.'],
+  ['Automatic mirroring is idle until a folder is connected.', 'Folder copies are off until you choose a folder.'],
+  ['No computer folder is connected.', 'No backup folder is connected.'],
+  ['Connected and write permission is currently granted.', 'Backup folder is connected and ready to receive copies.']
 ]);
 
 function insideTranscript(node: Node): boolean {
@@ -139,7 +161,10 @@ function rewriteCountText(text: string): string {
 }
 
 function applyGrandmaProofCopy(root: ParentNode = document): void {
-  const selector = 'button, h1, h2, h3, label, option, .brand, .conversation-meta, #count, .count';
+  const selector = [
+    'button', 'h1', 'h2', 'h3', 'label', 'option', 'p', '.brand', '.conversation-meta',
+    '#count', '.count', '.mirror-health', '.mirror-runtime', '.performance-status', '.qa-evidence-status'
+  ].join(', ');
   root.querySelectorAll(selector).forEach((element) => {
     if (insideTranscript(element)) return;
     const current = element.textContent?.trim();
