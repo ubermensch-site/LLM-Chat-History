@@ -4,18 +4,33 @@ import {
   runHistoricalScrollHarvest,
   type HarvestViewport
 } from '../providers/chatgpt/historical-harvest';
+import {
+  buildLiveQaReport,
+  collectChatGptLiveQaDomEvidence,
+  liveQaReportFilename,
+  renderLiveQaReportJson,
+  summarizeChatGptRoute
+} from '../qa/live-qa-report';
 import type {
+  AdapterHealthState,
   BackgroundAck,
   BackgroundToContentMessage,
   ContentToBackgroundMessage,
   CreateCheckpointMessage,
+  LiveQaArchiveStatus,
+  LiveQaStatusMessage,
   OpenLibraryMessage,
   ProviderObservation,
   RecorderCommand,
-  RecorderCommandMessage
+  RecorderCommandMessage,
+  RecorderState
 } from '../shared/types';
 import { withRetry } from '../transport/retry';
-import { mountRecorderPill, type HistoricalImportSummary } from '../ui/recorder-pill';
+import {
+  mountRecorderPill,
+  type HistoricalImportSummary,
+  type StorageHealthState
+} from '../ui/recorder-pill';
 
 const adapter = new ChatGptAdapter();
 const sourceSessionId = crypto.randomUUID();
@@ -26,11 +41,17 @@ let sendQueue: Promise<unknown> = Promise.resolve();
 let snapshotProfileStartedAt: number | null = null;
 let snapshotRenderedTurnCount = 0;
 let stopAdapterObservation: (() => void) | null = null;
+let currentRecordingState: RecorderState = 'recording';
+let currentStorageHealth: StorageHealthState = 'unknown';
+let currentLastSavedAt: string | null = null;
+let currentAdapterState: AdapterHealthState = 'healthy';
+let currentAdapterCode = 'unknown';
 
 const pill = mountRecorderPill({
   onCommand: (command) => sendRecorderCommand(command),
   onCheckpoint: (name, note) => sendCheckpoint(name, note),
   onImportHistory: () => importHistoricalConversation(),
+  onDownloadLiveQaReport: () => downloadLiveQaReport(),
   onOpenLibrary: () => openLibrary()
 });
 
@@ -46,12 +67,22 @@ function applyAck(ack: BackgroundAck | undefined): void {
   if (!ack.ok) throw new Error(ack.error ?? 'Background persistence failed');
 
   const next: Parameters<typeof pill.update>[0] = {};
-  if (ack.recordingState) next.recordingState = ack.recordingState;
+  if (ack.recordingState) {
+    currentRecordingState = ack.recordingState;
+    next.recordingState = ack.recordingState;
+  }
   if (ack.persistedAt) {
+    currentStorageHealth = 'healthy';
+    currentLastSavedAt = ack.persistedAt;
     next.storageHealth = 'healthy';
     next.lastSavedAt = ack.persistedAt;
   }
   pill.update(next);
+}
+
+function markStorageError(): void {
+  currentStorageHealth = 'error';
+  pill.update({ storageHealth: 'error' });
 }
 
 async function sendRequest(
@@ -95,7 +126,7 @@ async function sendRecorderCommand(command: RecorderCommand): Promise<void> {
   try {
     await sendRequest(message, true);
   } catch (error) {
-    pill.update({ storageHealth: 'error' });
+    markStorageError();
     console.warn('[LLM Chat History] recorder command failed after retries', error);
     throw error;
   }
@@ -121,7 +152,7 @@ async function sendCheckpoint(name: string, note: string | null): Promise<void> 
   try {
     await sendRequest(message, true);
   } catch (error) {
-    pill.update({ storageHealth: 'error' });
+    markStorageError();
     console.warn('[LLM Chat History] checkpoint persistence failed after retries', error);
     throw error;
   }
@@ -152,6 +183,8 @@ function applyObservationToRecorder(observation: ProviderObservation): void {
     pill.update({ turnCount: renderedTurnIds.size });
   } else if (observation.type === 'health') {
     recordSnapshotProfile();
+    currentAdapterState = observation.health.state;
+    currentAdapterCode = observation.health.code;
     pill.update({
       health: observation.health.state,
       healthCode: observation.health.code,
@@ -182,7 +215,7 @@ function queueObservation(observation: ProviderObservation): Promise<void> {
 
   const task = sendQueue.then(() => sendRequest(message, observation.type !== 'health'));
   sendQueue = task.catch((error: unknown) => {
-    pill.update({ storageHealth: 'error' });
+    markStorageError();
     console.warn('[LLM Chat History] observation persistence failed after retries', error);
   });
   return task;
@@ -260,6 +293,85 @@ async function importHistoricalConversation(): Promise<HistoricalImportSummary> 
   }
 }
 
+async function getLiveQaArchiveStatus(): Promise<LiveQaArchiveStatus> {
+  const identity = adapter.getConversationIdentity();
+  if (!identity) {
+    return {
+      conversationFound: false,
+      messageCount: 0,
+      eventCount: 0,
+      recordingState: null
+    };
+  }
+
+  const message: LiveQaStatusMessage = {
+    type: 'LLMCH_LIVE_QA_STATUS',
+    providerId: adapter.providerId,
+    sourceSessionId,
+    pageUrl: location.href,
+    identity
+  };
+  const ack = (await chrome.runtime.sendMessage(message)) as BackgroundAck | undefined;
+  if (!ack?.ok) throw new Error(ack?.error ?? 'Unable to read local archive QA status.');
+  if (!ack.liveQaStatus) throw new Error('Background did not return local archive QA status.');
+  return ack.liveQaStatus;
+}
+
+function downloadText(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function downloadLiveQaReport(): Promise<void> {
+  await sendQueue;
+  const identity = adapter.getConversationIdentity();
+  const routeUrl = new URL(location.href);
+  const scrollContainer = adapter.getConversationScrollContainer();
+  const dom = collectChatGptLiveQaDomEvidence(document, {
+    adapterScrollContainer: scrollContainer,
+    documentScrollingElement: document.scrollingElement,
+    historyApiAvailable:
+      typeof window.history.pushState === 'function' &&
+      typeof window.history.replaceState === 'function'
+  });
+  const route = summarizeChatGptRoute(
+    routeUrl,
+    Boolean(identity?.providerConversationId),
+    identity?.provisional ?? true
+  );
+  const archive = await getLiveQaArchiveStatus();
+  const generatedAt = new Date().toISOString();
+  const historicalImportAvailable =
+    currentRecordingState === 'recording' &&
+    currentAdapterState !== 'error' &&
+    Boolean(identity?.providerConversationId) &&
+    !dom.stopGenerationControlPresent;
+
+  const report = buildLiveQaReport({
+    generatedAt,
+    extensionVersion: chrome.runtime.getManifest().version,
+    route,
+    dom,
+    runtime: {
+      adapterState: currentAdapterState,
+      adapterCode: currentAdapterCode,
+      recordingState: currentRecordingState,
+      storageHealth: currentStorageHealth,
+      renderedTurnCount: renderedTurnIds.size,
+      lastSaveConfirmed: currentLastSavedAt !== null,
+      historicalImportAvailable
+    },
+    archive
+  });
+
+  downloadText(liveQaReportFilename(generatedAt), renderLiveQaReportJson(report));
+}
+
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   const candidate = message as Partial<BackgroundToContentMessage> | null;
   if (!candidate || candidate.type !== 'LLMCH_SHOW_RECORDER') return;
@@ -271,6 +383,8 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 if (adapter.matchesLocation(new URL(location.href))) {
   startAdapterObservation();
 } else {
+  currentAdapterState = 'error';
+  currentAdapterCode = 'unsupported-location';
   pill.update({
     health: 'error',
     healthCode: 'unsupported-location',
