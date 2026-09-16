@@ -49,6 +49,25 @@ function bundle(): ArchiveExportBundle {
       plainText: 'Answer',
       markdown: '**Answer**',
       partial: false,
+      modelLabel: 'GPT-5.6 Sol',
+      visibleActivities: [
+        {
+          providerActivityId: 'assistant-1:visible:0:a',
+          kind: 'reasoning-summary',
+          text: 'Thinking',
+          orderHint: 0,
+          firstObservedAt: '2026-09-16T10:01:30.000Z',
+          lastObservedAt: '2026-09-16T10:01:31.000Z'
+        },
+        {
+          providerActivityId: 'assistant-1:visible:1:b',
+          kind: 'tool',
+          text: 'Fetched branch files',
+          orderHint: 1,
+          firstObservedAt: '2026-09-16T10:01:40.000Z',
+          lastObservedAt: '2026-09-16T10:01:41.000Z'
+        }
+      ],
       contentHash: 'hash-assistant',
       firstObservedAt: '2026-09-16T10:02:00.000Z',
       lastObservedAt: '2026-09-16T10:02:00.000Z',
@@ -136,5 +155,21 @@ describe('JSON archive import validation', () => {
       events[1]!.id = 'suppressed:wrong-conversation:private-turn';
     });
     expect(() => parseJsonArchiveExport(invalid)).toThrow(/normalized suppression ID/);
+  });
+
+  it('rejects malformed or duplicate visible activity entries', () => {
+    const invalidKind = mutateExport((value) => {
+      const messages = value.messages as Array<Record<string, unknown>>;
+      const activities = messages[1]!.visibleActivities as Array<Record<string, unknown>>;
+      activities[0]!.kind = 'hidden-chain-of-thought';
+    });
+    expect(() => parseJsonArchiveExport(invalidKind)).toThrow(/visible activity kind/);
+
+    const duplicate = mutateExport((value) => {
+      const messages = value.messages as Array<Record<string, unknown>>;
+      const activities = messages[1]!.visibleActivities as Array<Record<string, unknown>>;
+      activities[1]!.providerActivityId = activities[0]!.providerActivityId;
+    });
+    expect(() => parseJsonArchiveExport(duplicate)).toThrow(/duplicate visible activity identifiers/);
   });
 });
