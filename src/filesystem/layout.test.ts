@@ -49,14 +49,14 @@ describe('deterministic filesystem layout', () => {
 
     expect(first).toEqual(second);
     expect(first.root).toBe(MIRROR_ROOT_DIRECTORY);
-    expect(first.project).toBe('Sab Puja Store- Launch');
+    expect(first.project).toBe('Sab Puja Store Launch');
     expect(first.month).toBe('2026-09');
     expect(first.filename).toMatch(
       /^2026-09-16T23-59-58-123Z__chatgpt__sabpuja-shopify-rebuild--c-[a-z0-9-]+-[0-9a-f]{8}\.md$/
     );
     expect(first.segments).toEqual([
       'LLM Chat History',
-      'Sab Puja Store- Launch',
+      'Sab Puja Store Launch',
       '2026-09',
       first.filename
     ]);
@@ -87,7 +87,7 @@ describe('deterministic filesystem layout', () => {
 
   it('normalizes path separators, control characters and Windows reserved names', () => {
     expect(safeDirectorySegment('  CON  ')).toBe('_CON');
-    expect(safeDirectorySegment('Project/Alpha\\Beta:*?')).toBe('Project Alpha Beta-');
+    expect(safeDirectorySegment('Project/Alpha\\Beta:*?')).toBe('Project Alpha Beta');
     expect(safeFilenameSlug('NUL')).toBe('_nul');
     expect(safeFilenameSlug('A/B\\C:*?<>|')).toBe('a-b-c');
 
