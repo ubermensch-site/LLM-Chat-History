@@ -1,6 +1,6 @@
 # LLM Chat History v0.1 — Release Checklist
 
-Status: **BLOCKED — release preparation only**
+Status: **BLOCKED — authenticated live validation required**
 Target version: 0.1.0
 Tracking: TASK-054 issue #37
 
@@ -17,33 +17,37 @@ Do not mark this checklist complete or create a final v0.1 release solely from a
 
 ## 2. Automated quality gates
 
-Required on the exact final candidate commit:
+Current repository evidence:
 
-- [ ] TypeScript typecheck green.
-- [ ] Full unit/integration/stress tests green.
-- [ ] Production extension build green.
-- [ ] Security/distribution verifier green.
-- [ ] Deterministic release packaging green.
-- [ ] Unpacked extension artifact uploaded.
-- [ ] Packaged `llm-chat-history-v0.1.0.zip` artifact uploaded.
-- [ ] ZIP SHA-256 recorded in release notes/checklist.
+- [x] TypeScript typecheck green.
+- [x] Full unit/integration/stress tests green.
+- [x] Production extension build green.
+- [x] Security/distribution verifier green.
+- [x] Deterministic release packaging green.
+- [x] Unpacked extension artifact upload proven in CI.
+- [x] Packaged `llm-chat-history-v0.1.0.zip` artifact upload proven in CI.
+- [x] Historical-import 1,002-turn/lazy-load/failure-restoration/truncation tests green.
 
-The checklist boxes above remain open until the exact final RC head is known; earlier green runs are supporting evidence but not a substitute for the final-head gate.
+These prove implementation quality but do not replace the final exact-candidate gate after live QA.
 
 ## 3. Package inspection
 
-For the exact final candidate ZIP:
+For the exact final candidate ZIP after live QA:
 
+- [ ] record final CI run number and commit SHA.
+- [ ] record packaged artifact name.
+- [ ] record GitHub artifact SHA-256 digest.
+- [ ] record internal release ZIP `.sha256` value.
 - [ ] ZIP opens successfully and CRC validation passes.
-- [ ] Contains only intended extension files.
+- [ ] contains only intended extension files.
 - [ ] `manifest.json` reports 0.1.0 and Manifest V3.
-- [ ] No `.map` files.
-- [ ] No development/test/source files accidentally packaged.
-- [ ] Only `storage` extension permission.
-- [ ] Host permissions limited to `chatgpt.com` and `chat.openai.com`.
-- [ ] Explicit extension CSP present.
-- [ ] No remotely hosted executable code.
-- [ ] Checksum matches CI-generated SHA-256 file.
+- [ ] no `.map` files.
+- [ ] no development/test/source files accidentally packaged.
+- [ ] only `storage` extension permission.
+- [ ] host permissions limited to `chatgpt.com` and `chat.openai.com`.
+- [ ] explicit extension CSP present.
+- [ ] no remotely hosted executable code.
+- [ ] checksum matches CI-generated SHA-256 file.
 
 ## 4. Documentation
 
@@ -53,9 +57,9 @@ For the exact final candidate ZIP:
 - [x] Migration/data compatibility: `docs/release/migration-v0.1.md`.
 - [x] Security/privacy review: `docs/security/security-privacy-review-v0.1.md`.
 - [x] Changelog/release notes: `CHANGELOG.md`.
-- [x] PRD acceptance evidence matrix: `docs/qa/v0.1-acceptance-evidence.md`.
+- [x] PRD acceptance evidence matrix: `docs/release/acceptance-evidence-v0.1.md`.
 - [x] Live ChatGPT QA protocol: `docs/qa/live-chatgpt-validation.md`.
-- [ ] final release notes updated with exact artifact checksum and QA environment.
+- [ ] final release notes updated with exact validated artifact checksum and QA environment.
 
 ## 5. Authenticated live ChatGPT QA — BLOCKING
 
@@ -70,45 +74,66 @@ Issue #3 is the source of truth.
 - [ ] Minimize/hide changes UI only and capture continues.
 - [ ] Refresh/MV3 wake recovery preserves archive and resumes writes.
 - [ ] Long-thread virtualization does not delete/duplicate captured turns.
+- [ ] Explicit **Import history** completes on a real long thread (or reports the safety cap clearly), preserves ordering, creates no duplicates, and restores the user's position.
+- [ ] Re-running **Import history** is idempotent for already captured turns.
 - [ ] Library/search/Markdown/JSON smoke test passes.
 - [ ] Current semantic selectors/IDs documented without private content.
 - [ ] Adapter health remains healthy/degraded as expected; no silent selector failure.
 
-## 6. Historical long-thread import — BLOCKING OR REQUIRES EXPLICIT RESCOPE
+## 6. Historical long-thread import — IMPLEMENTED / LIVE VALIDATION REQUIRED
 
-Original TASK-012 scope includes an explicit historical scroll-and-harvest/import path for already-long conversations.
+The original TASK-012 historical-import code gap is closed in `main` (`ea8d09a`).
 
-- [ ] Implement and validate historical harvest, **or**
-- [ ] deliberately re-scope it out of v0.1 with PRD/roadmap/issue/release-notes changes approved before release.
+Automated evidence:
 
-Do not infer full historical coverage from the existing >1,000-turn synthetic virtualization tests; those prove reconciliation/retention logic, not that the provider has rendered every historical turn during first-time capture.
+- [x] explicit manual **Import history** action exists; no silent auto-scroll.
+- [x] import is allowed only while actively recording.
+- [x] import refuses to start while assistant output is still streaming.
+- [x] scroll-container discovery has a document-scroll fallback.
+- [x] traversal walks to a stable top then a stable bottom.
+- [x] every traversal step is smaller than the viewport, guaranteeing overlapping windows.
+- [x] each window persists through the canonical retry/dedupe `turn-snapshot` path.
+- [x] navigation to another conversation aborts the import.
+- [x] normal MutationObserver capture is restored in `finally`.
+- [x] original distance-from-bottom is restored even after failure.
+- [x] 500-window hard safety cap reports truncation.
+- [x] synthetic 1,002-turn traversal passes.
+- [x] lazy older-history expansion at the top passes.
+- [x] failure-restoration and truncation tests pass.
+
+Remaining gate:
+
+- [ ] authenticated live ChatGPT validation confirms the provider currently exposes/loads historical turns in a way this traversal can harvest safely.
+
+The first CI run caught a real skipped-window bug caused by a 240px minimum step. The implementation was fixed—not the coverage—so all scroll moves are now strictly smaller than the current viewport and the unchanged long-history tests pass.
 
 ## 7. Privacy/security manual smoke checks
 
-- [ ] Archived provider text displays as inert text in Library.
-- [ ] Unsafe links/content do not become executable UI.
-- [ ] Pause test confirms omitted text absent from Markdown and JSON.
-- [ ] Diagnostics download contains no conversation text/URL/title/checkpoint notes.
-- [ ] Performance report contains aggregate metadata only.
+- [ ] archived provider text displays as inert text in Library.
+- [ ] unsafe links/content do not become executable UI.
+- [ ] pause test confirms omitted text absent from Markdown and JSON.
+- [ ] diagnostics download contains no conversation text/URL/title/checkpoint notes.
+- [ ] performance report contains aggregate metadata only.
 - [ ] Library Delete warning clearly states browser-only deletion scope.
-- [ ] Filesystem mirror permission loss shows warning without affecting canonical capture.
+- [ ] filesystem mirror permission loss shows warning without affecting canonical capture.
 
 ## 8. Upgrade/uninstall smoke checks
 
-- [ ] Upgrade a prior development install to 0.1.0 without uninstalling and confirm existing IndexedDB archive remains readable.
-- [ ] Confirm database v2 project migration behavior for a v1 fixture (automated test already exists; optional manual browser smoke recommended).
-- [ ] Export JSON, import into a clean profile/install, and verify round-trip locally.
-- [ ] Verify uninstall warning/documentation is understood: extension-owned browser storage may be removed.
+- [ ] upgrade a prior development install to 0.1.0 without uninstalling and confirm existing IndexedDB archive remains readable.
+- [ ] confirm database v2 project migration behavior for a v1 fixture (automated test already exists; optional manual browser smoke recommended).
+- [ ] export JSON, import into a clean profile/install, and verify round-trip locally.
+- [ ] verify uninstall warning/documentation is understood: extension-owned browser storage may be removed.
 
 ## 9. Release approval
 
-Only after sections 1–8 are satisfied:
+Only after the remaining live/manual sections are satisfied:
 
 - [ ] issue #3 closed with authenticated live evidence.
 - [ ] TASK-054 issue #37 updated with final evidence.
-- [ ] PR #38 (or successor final RC PR) ready and green on exact head.
-- [ ] merge final RC changes to `main`.
+- [ ] run the complete gate on the exact final post-QA candidate commit.
+- [ ] record final artifact/checksum/QA environment.
+- [ ] close TASK-054 only after all release gates pass.
 - [ ] create/tag final v0.1.0 release artifact from the approved commit.
 - [ ] publish checksum + install/privacy/limitations links with release notes.
 
-Until then, v0.1.0 is a **release candidate under validation**, not a production-ready release.
+Until then, v0.1.0 is a **release candidate under authenticated runtime validation**, not a production-ready release.
