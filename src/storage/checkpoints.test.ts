@@ -1,6 +1,12 @@
 import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
-import { createCheckpoint, deleteCheckpoint, listCheckpoints, updateCheckpoint } from './checkpoints';
+import {
+  CheckpointConflictError,
+  createCheckpoint,
+  deleteCheckpoint,
+  listCheckpoints,
+  updateCheckpoint
+} from './checkpoints';
 import { openArchiveDb, requestToPromise, transactionDone } from './db';
 import { deleteConversationCascade } from './library-management';
 import { STORES, type ArchiveConversation } from './schema';
@@ -72,6 +78,41 @@ describe('checkpoint archive events', () => {
       updatedAt: '2026-09-16T10:06:00.000Z'
     });
     expect(await listCheckpoints(db, conversation.id)).toEqual([updated]);
+  });
+
+  it('treats an ACK-lost retry with the same checkpoint request ID as a no-op', async () => {
+    const { db, conversation } = await createDb();
+    const requestId = 'checkpoint:request-123';
+    const first = await createCheckpoint(
+      db,
+      conversation.id,
+      'Release ready',
+      'All automated gates passed.',
+      '2026-09-16T10:07:00.000Z',
+      requestId
+    );
+    const retry = await createCheckpoint(
+      db,
+      conversation.id,
+      'Release ready',
+      'All automated gates passed.',
+      '2026-09-16T10:07:00.000Z',
+      requestId
+    );
+
+    expect(retry).toEqual(first);
+    expect(await listCheckpoints(db, conversation.id)).toEqual([first]);
+
+    await expect(
+      createCheckpoint(
+        db,
+        conversation.id,
+        'Different data',
+        null,
+        '2026-09-16T10:07:00.000Z',
+        requestId
+      )
+    ).rejects.toBeInstanceOf(CheckpointConflictError);
   });
 
   it('deletes one checkpoint without altering the conversation', async () => {
