@@ -17,6 +17,7 @@ import { CoalescingMirrorQueue } from '../filesystem/writer';
 import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
 import { provisionalConversationKey } from '../storage/ids';
+import { stableSourceSessionId } from './source-session';
 
 type PersistingRequest = Exclude<
   ContentToBackgroundRequest,
@@ -57,6 +58,16 @@ function hasEnvelopeFields(value: unknown): value is {
     typeof candidate.pageUrl === 'string' &&
     candidate.pageUrl.length > 0
   );
+}
+
+function withStableSourceSession<T extends { sourceSessionId: string }>(
+  message: T,
+  sender: chrome.runtime.MessageSender
+): T {
+  const sourceSessionId = stableSourceSessionId(message.sourceSessionId, sender.tab?.id);
+  return sourceSessionId === message.sourceSessionId
+    ? message
+    : { ...message, sourceSessionId };
 }
 
 function isProviderObservationMessage(value: unknown): value is ContentToBackgroundMessage {
@@ -323,7 +334,7 @@ chrome.action.onClicked.addListener((tab) => {
   });
 });
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (!isKnownRequest(message)) return;
 
   if (message.type === 'LLMCH_OPEN_LIBRARY') {
@@ -348,8 +359,9 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
   }
 
   if (message.type === 'LLMCH_LIVE_QA_STATUS') {
+    const liveQaMessage = withStableSourceSession(message, sender);
     void getRepository()
-      .then((repository) => liveQaStatusForRequest(repository, message))
+      .then((repository) => liveQaStatusForRequest(repository, liveQaMessage))
       .then((liveQaStatus) => sendResponse({ ok: true, liveQaStatus } satisfies BackgroundAck))
       .catch((error: unknown) => {
         const text = error instanceof Error ? error.message : String(error);
@@ -358,15 +370,16 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     return true;
   }
 
+  const persistenceMessage = withStableSourceSession(message, sender);
   void getRepository()
     .then(async (repository) => {
       let recordingState;
-      if (message.type === 'LLMCH_RECORDER_COMMAND') {
-        recordingState = await repository.applyRecorderCommand(message);
-      } else if (message.type === 'LLMCH_CREATE_CHECKPOINT') {
-        recordingState = await repository.createCheckpoint(message);
+      if (persistenceMessage.type === 'LLMCH_RECORDER_COMMAND') {
+        recordingState = await repository.applyRecorderCommand(persistenceMessage);
+      } else if (persistenceMessage.type === 'LLMCH_CREATE_CHECKPOINT') {
+        recordingState = await repository.createCheckpoint(persistenceMessage);
       } else {
-        recordingState = await repository.persistObservation(message);
+        recordingState = await repository.persistObservation(persistenceMessage);
       }
       return { repository, recordingState };
     })
@@ -384,7 +397,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 
       // The canonical ACK is deliberately sent first. Optional filesystem work runs
       // from the latest IndexedDB state and can coalesce subsequent recorder events.
-      void mirrorAfterCanonicalPersistence(repository, message);
+      void mirrorAfterCanonicalPersistence(repository, persistenceMessage);
     })
     .catch(async (error: unknown) => {
       const text = error instanceof Error ? error.message : String(error);
