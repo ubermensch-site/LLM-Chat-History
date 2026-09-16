@@ -75,7 +75,14 @@ export interface RecorderCommandMessage {
   observedAt: string;
 }
 
-export type ContentToBackgroundRequest = ContentToBackgroundMessage | RecorderCommandMessage;
+export interface OpenLibraryMessage {
+  type: 'LLMCH_OPEN_LIBRARY';
+}
+
+export type ContentToBackgroundRequest =
+  | ContentToBackgroundMessage
+  | RecorderCommandMessage
+  | OpenLibraryMessage;
 
 export interface BackgroundAck {
   ok: boolean;
