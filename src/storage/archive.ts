@@ -65,6 +65,15 @@ function recorderStateFromEvent(event: ArchiveEvent | undefined): RecorderState 
     : null;
 }
 
+function turnContentHashInput(turn: ProviderTurnObservation): string {
+  return JSON.stringify([
+    turn.role,
+    turn.plainText,
+    turn.markdown,
+    turn.modelLabel ?? null
+  ]);
+}
+
 export class ArchiveRepository {
   constructor(private readonly db: IDBDatabase) {}
 
@@ -228,7 +237,7 @@ export class ArchiveRepository {
     state: RecorderState
   ): Promise<void> {
     const id = messageId(conversation.id, turn.providerTurnId);
-    const contentHash = await sha256Hex(JSON.stringify([turn.role, turn.plainText, turn.markdown]));
+    const contentHash = await sha256Hex(turnContentHashInput(turn));
     const suppressionId = suppressedTurnEventId(conversation.id, turn.providerTurnId);
 
     const readTransaction = this.db.transaction([STORES.messages, STORES.events], 'readonly');
@@ -287,7 +296,7 @@ export class ArchiveRepository {
     }
 
     const id = messageId(conversation.id, turn.providerTurnId);
-    const contentHash = await sha256Hex(JSON.stringify([turn.role, turn.plainText, turn.markdown]));
+    const contentHash = await sha256Hex(turnContentHashInput(turn));
 
     const transaction = this.db.transaction(
       [STORES.messages, STORES.conversations, STORES.events],
@@ -316,6 +325,7 @@ export class ArchiveRepository {
       plainText: turn.plainText,
       markdown: turn.markdown,
       partial: turn.partial,
+      modelLabel: turn.modelLabel ?? existing?.modelLabel ?? null,
       contentHash,
       firstObservedAt: existing?.firstObservedAt ?? turn.observedAt,
       lastObservedAt: turn.observedAt,
