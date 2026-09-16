@@ -70,8 +70,9 @@ describe('live QA report', () => {
     expect(JSON.stringify(evidence)).not.toContain(secretText);
   });
 
-  it('renders only allowlisted runtime/archive metadata even when source objects contain secrets', () => {
+  it('renders only allowlisted runtime/archive metadata and visible-activity counts', () => {
     const secret = 'TOP-SECRET-CHAT-TEXT';
+    const activityText = 'PRIVATE-VISIBLE-ACTIVITY-TEXT';
     const report = buildLiveQaReport({
       generatedAt: '2026-09-16T12:00:00.000Z',
       extensionVersion: '0.1.0',
@@ -120,16 +121,20 @@ describe('live QA report', () => {
         conversationFound: true,
         messageCount: 4,
         eventCount: 9,
+        visibleActivityCount: 6,
         recordingState: 'recording',
+        visibleActivityText: activityText,
         secret
       } as never
     });
 
     const json = renderLiveQaReportJson(report);
     expect(json).not.toContain(secret);
+    expect(json).not.toContain(activityText);
     expect(json).not.toContain('sourceUrl');
     expect(json).not.toContain('title');
     expect(json).toContain('"messageCount": 4');
+    expect(json).toContain('"visibleActivityCount": 6');
     expect(json).toContain('"containsChatText": false');
   });
 });
