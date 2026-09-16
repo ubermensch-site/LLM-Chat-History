@@ -3,21 +3,30 @@
 Status: Release-candidate documentation
 Version: 0.1.0
 
-## Release blockers still open
+## Release blocker still open
 
 ### Authenticated live ChatGPT QA
 
-The repository has extensive synthetic/unit/integration coverage, but current ChatGPT DOM behavior has not yet been authenticated against a real logged-in browser session because the connected browser automation environment could not start the required strict-agent run.
+The repository has extensive synthetic/unit/integration coverage, and explicit historical import is now implemented, but the exact current ChatGPT runtime has not yet been validated with the extension loaded in a real logged-in Chrome/Edge session.
 
 Issue #3 remains the authoritative live-validation gate. v0.1 must not be called release-ready until that evidence is recorded.
 
-### First-time historical harvest for already-long threads
+## Historical import limitations
 
-The recorder incrementally archives rendered turns and preserves turns already stored when ChatGPT virtualizes/unmounts them. Automated tests cover overlapping virtualized windows and long histories.
+v0.1 now includes an explicit **Import history** action in the recorder for already-long ChatGPT conversations.
 
-However, v0.1 does not yet provide an explicit scroll-and-harvest workflow that guarantees first-time capture of every historical turn in an already-long conversation whose older content is not currently rendered.
+The import:
 
-This capability is still tracked in issue #3 and must either be implemented/validated or explicitly re-scoped before final release approval.
+- is manual and never starts silently;
+- is available only while actively recording;
+- refuses to start while an assistant response is still streaming;
+- temporarily scrolls upward and then downward through the current conversation;
+- captures rendered/virtualized windows through the same canonical archive and dedupe pipeline;
+- aborts if the active conversation changes;
+- restores the user's original distance-from-bottom after completion/failure;
+- stops at a 500-window safety limit rather than looping indefinitely.
+
+Automated tests cover a 1,002-turn virtualized history, lazy older-history expansion, failure restoration and truncation. However, provider lazy-loading/virtualization behavior can change, so this workflow still requires authenticated live ChatGPT validation before v0.1 release approval. If the safety cap is reached, the UI reports truncation and the user may run the import again.
 
 ## Functional limitations
 
