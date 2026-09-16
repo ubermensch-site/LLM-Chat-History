@@ -19,22 +19,25 @@ import {
 
 const isoNow = () => new Date().toISOString();
 
-const TRANSIENT_ASSISTANT_STATUS_PATTERNS = [
-  /^Connection interrupted\.?\s+Waiting for the complete answer\.?$/i
-] as const;
-
 export function parseChatGptConversationId(url: URL): string | null {
   const match = url.pathname.match(/\/c\/([^/?#]+)/);
   return match?.[1] ?? null;
 }
 
-export function isTransientAssistantStatusText(text: string): boolean {
-  const normalized = text.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
-  return TRANSIENT_ASSISTANT_STATUS_PATTERNS.some((pattern) => pattern.test(normalized));
-}
+export function normalizeVisibleModelLabel(value: string): string | null {
+  const normalized = value
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^(?:model|used model)\s*[:\-]\s*/i, '')
+    .trim();
 
-export function shouldArchiveChatGptTurn(role: TurnRole, plainText: string): boolean {
-  return role !== 'assistant' || !isTransientAssistantStatusText(plainText);
+  if (!normalized || normalized.length > 80) return null;
+  return /^(?:GPT[-\s]?\d[\w.+\- ]*|ChatGPT[\w.+\- ]*|o\d[\w.+\- ]*|OpenAI\s+o\d[\w.+\- ]*)$/i.test(
+    normalized
+  )
+    ? normalized
+    : null;
 }
 
 function queryFirst(root: ParentNode, selectors: readonly string[]): Element | null {
@@ -89,6 +92,25 @@ function contentNodeFor(element: Element, role: TurnRole): Element | null {
 
 function normalizedText(element: Element | null): string {
   return (element?.textContent ?? '').replace(/\u00a0/g, ' ').trim();
+}
+
+function visibleModelLabelFor(turn: Element, contentNode: Element | null): string | null {
+  const candidates = turn.querySelectorAll(
+    'button, [role="button"], [data-testid*="model" i], [aria-label*="model" i]'
+  );
+
+  for (const candidate of candidates) {
+    if (candidate.getAttribute('aria-hidden') === 'true') continue;
+    if (contentNode && (candidate === contentNode || contentNode.contains(candidate))) continue;
+
+    const fromText = normalizeVisibleModelLabel(candidate.textContent ?? '');
+    if (fromText) return fromText;
+
+    const fromAria = normalizeVisibleModelLabel(candidate.getAttribute('aria-label') ?? '');
+    if (fromAria) return fromAria;
+  }
+
+  return null;
 }
 
 function hasGenerationControl(): boolean {
@@ -158,20 +180,10 @@ export class ChatGptAdapter implements ProviderAdapter {
 
     const elements = collectTurnElements();
     const generating = hasGenerationControl();
-    const skippedAssistantIndices = new Set<number>();
     let lastAssistantIndex = -1;
 
     elements.forEach((element, index) => {
-      const role = roleFor(element);
-      if (role !== 'assistant') return;
-
-      const plainText = normalizedText(contentNodeFor(element, role));
-      if (!shouldArchiveChatGptTurn(role, plainText)) {
-        skippedAssistantIndices.add(index);
-        return;
-      }
-
-      lastAssistantIndex = index;
+      if (roleFor(element) === 'assistant') lastAssistantIndex = index;
     });
 
     const turns: ProviderTurnObservation[] = [];
@@ -179,7 +191,6 @@ export class ChatGptAdapter implements ProviderAdapter {
     elements.forEach((element, index) => {
       const role = roleFor(element);
       if (!role) return;
-      if (role === 'assistant' && skippedAssistantIndices.has(index)) return;
 
       const messageNode = messageNodeFor(element, role);
       const providerMessageId = messageNode?.getAttribute('data-message-id') ?? null;
@@ -202,6 +213,7 @@ export class ChatGptAdapter implements ProviderAdapter {
         plainText,
         markdown: renderedMarkdown || plainText || null,
         partial: role === 'assistant' && generating && index === lastAssistantIndex,
+        modelLabel: role === 'assistant' ? visibleModelLabelFor(element, contentNode) : null,
         observedAt: isoNow()
       });
     });
