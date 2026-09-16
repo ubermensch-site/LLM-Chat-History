@@ -184,24 +184,23 @@ export async function requestDirectoryPermission(
   }
 }
 
-export async function pickAndStoreDirectory(
-  db: IDBDatabase,
-  target: Window = window
-): Promise<MirrorConnectionHealth> {
+export function pickDirectory(target: Window = window): Promise<FileSystemDirectoryHandle> {
   const picker = (target as DirectoryPickerWindow).showDirectoryPicker;
   if (!picker) {
-    return {
-      state: 'unsupported',
-      folderName: null,
-      detail: 'This browser does not expose the required directory picker.'
-    };
+    return Promise.reject(new Error('This browser does not expose the required directory picker.'));
   }
-
-  const handle = await picker.call(target, {
+  return picker.call(target, {
     id: 'llm-chat-history-archive',
     mode: 'readwrite',
     startIn: 'documents'
   });
+}
+
+export async function pickAndStoreDirectory(
+  db: IDBDatabase,
+  target: Window = window
+): Promise<MirrorConnectionHealth> {
+  const handle = await pickDirectory(target);
   await storeDirectoryHandle(db, handle);
   return queryDirectoryHealth(handle, target);
 }
