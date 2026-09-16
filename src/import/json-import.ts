@@ -1,4 +1,8 @@
-import type { ArchiveExportBundle } from '../export/export';
+import {
+  ARCHIVE_EXPORT_SCHEMA,
+  ARCHIVE_EXPORT_SCHEMA_VERSION,
+  type ArchiveExportBundle
+} from '../export/export';
 import { messageId, providerConversationKey } from '../storage/ids';
 import type {
   ArchiveConversation,
@@ -6,9 +10,6 @@ import type {
   ArchiveEventType,
   ArchiveMessage
 } from '../storage/schema';
-
-export const ARCHIVE_EXPORT_SCHEMA = 'llm-chat-history/archive-export';
-export const ARCHIVE_EXPORT_SCHEMA_VERSION = 1;
 
 const EVENT_TYPES = new Set<ArchiveEventType>([
   'conversation-created',
@@ -117,7 +118,10 @@ function parseConversation(value: unknown): ArchiveConversation {
     updatedAt: timestamp(input.updatedAt, 'conversation.updatedAt'),
     lastObservedAt: timestamp(input.lastObservedAt, 'conversation.lastObservedAt'),
     messageCount: integerValue(input.messageCount, 'conversation.messageCount'),
-    recordingState: stringValue(input.recordingState, 'conversation.recordingState') as ArchiveConversation['recordingState'],
+    recordingState: stringValue(
+      input.recordingState,
+      'conversation.recordingState'
+    ) as ArchiveConversation['recordingState'],
     recordingStateUpdatedAt: timestamp(
       input.recordingStateUpdatedAt,
       'conversation.recordingStateUpdatedAt'
@@ -182,7 +186,10 @@ function parseMessage(
     providerMessageId: nullableString(input.providerMessageId, `${path}.providerMessageId`),
     role: stringValue(input.role, `${path}.role`) as ArchiveMessage['role'],
     orderHint: integerValue(input.orderHint, `${path}.orderHint`),
-    plainText: typeof input.plainText === 'string' ? input.plainText : fail(`${path}.plainText`, 'expected a string'),
+    plainText:
+      typeof input.plainText === 'string'
+        ? input.plainText
+        : fail(`${path}.plainText`, 'expected a string'),
     markdown:
       input.markdown === null
         ? null
