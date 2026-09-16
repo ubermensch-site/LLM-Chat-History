@@ -1,3 +1,4 @@
+import { recordPerformanceSample } from '../performance/metrics';
 import { ArchiveRepository } from '../storage/archive';
 import { listCheckpoints } from '../storage/checkpoints';
 import { openArchiveDb } from '../storage/db';
@@ -164,6 +165,17 @@ function resultButton(result: LibrarySearchResult): HTMLButtonElement {
   return button;
 }
 
+function recordSearchProfile(durationMs: number, resultCount: number): void {
+  void recordPerformanceSample(chrome.storage.local, {
+    metric: 'library-search-ms',
+    durationMs,
+    at: new Date().toISOString(),
+    itemCount: resultCount
+  }).catch((error: unknown) => {
+    console.debug('[LLM Chat History] search performance sample unavailable', error);
+  });
+}
+
 async function renderSearchResults(): Promise<void> {
   const query = searchInput.value.trim();
   if (!query) {
@@ -175,7 +187,10 @@ async function renderSearchResults(): Promise<void> {
 
   try {
     const records = (await loadRecords()).filter(belongsToCurrentFilters);
-    const results = searchLibraryRecords(records, query).slice(0, 100);
+    const searchStartedAt = performance.now();
+    const allResults = searchLibraryRecords(records, query);
+    recordSearchProfile(performance.now() - searchStartedAt, allResults.length);
+    const results = allResults.slice(0, 100);
     resultPanel.hidden = false;
     list.hidden = true;
 
