@@ -42,7 +42,7 @@ function archiveEvent(
   type: ArchiveEventType,
   createdAt: string,
   data: ArchiveEvent['data'] = {},
-  id = crypto.randomUUID()
+  id: string = crypto.randomUUID()
 ): ArchiveEvent {
   return { id, conversationId, type, createdAt, data };
 }
