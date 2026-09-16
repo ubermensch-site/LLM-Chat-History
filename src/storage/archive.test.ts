@@ -55,6 +55,7 @@ function turnObservation(input: {
   orderHint: number;
   plainText: string;
   partial?: boolean;
+  modelLabel?: string | null;
   observedAt: string;
 }): ProviderObservation {
   return {
@@ -69,6 +70,7 @@ function turnObservation(input: {
       plainText: input.plainText,
       markdown: input.plainText,
       partial: input.partial ?? false,
+      ...(input.modelLabel !== undefined ? { modelLabel: input.modelLabel } : {}),
       observedAt: input.observedAt
     }
   };
@@ -161,7 +163,7 @@ describe('archive schema v2', () => {
     expect(messages[0]?.plainText).toBe('hello');
   });
 
-  it('upserts streaming turns, preserves order and avoids duplicates', async () => {
+  it('upserts streaming turns, preserves order, visible model labels and avoids duplicates', async () => {
     const repository = await createRepository();
     const session = 'session-b';
     const conversationId = 'conversation-456';
@@ -213,6 +215,7 @@ describe('archive schema v2', () => {
           orderHint: 1,
           plainText: 'Final answer',
           partial: false,
+          modelLabel: 'GPT-5.6 Sol',
           observedAt: '2026-09-16T10:00:03.000Z'
         }),
         pageUrl
@@ -242,6 +245,7 @@ describe('archive schema v2', () => {
     expect(messages.map((message) => message.role)).toEqual(['user', 'assistant']);
     expect(messages[1]?.plainText).toBe('Final answer');
     expect(messages[1]?.partial).toBe(false);
+    expect(messages[1]?.modelLabel).toBe('GPT-5.6 Sol');
 
     const events = await repository.listEvents(conversations[0]!.id);
     expect(events.filter((event) => event.type === 'message-added')).toHaveLength(2);
