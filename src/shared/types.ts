@@ -3,12 +3,23 @@ export type TurnRole = 'user' | 'assistant';
 export type AdapterHealthState = 'healthy' | 'degraded' | 'error';
 export type RecorderState = 'recording' | 'paused' | 'stopped' | 'error';
 export type RecorderCommand = 'pause' | 'resume' | 'stop' | 'start';
+export type VisibleActivityKind = 'reasoning-summary' | 'tool' | 'status' | 'other';
 
 export interface ProviderConversationIdentity {
   providerId: ProviderId;
   providerConversationId: string | null;
   sourceUrl: string;
   provisional: boolean;
+}
+
+export interface ProviderVisibleActivityObservation {
+  /** Stable within a rendered provider turn; never derived from hidden/private reasoning. */
+  providerActivityId: string;
+  kind: VisibleActivityKind;
+  /** Text that was visibly rendered by the provider while the response was running. */
+  text: string;
+  orderHint: number;
+  observedAt: string;
 }
 
 export interface ProviderTurnObservation {
@@ -23,6 +34,8 @@ export interface ProviderTurnObservation {
   partial: boolean;
   /** Visible provider UI label only. Never inferred from hidden page data. */
   modelLabel?: string | null;
+  /** Visible reasoning summaries, tool/work steps and statuses shown in the provider UI. */
+  visibleActivities?: ProviderVisibleActivityObservation[];
   observedAt: string;
 }
 
