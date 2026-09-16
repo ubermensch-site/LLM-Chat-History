@@ -67,6 +67,7 @@ export interface ContentToBackgroundMessage {
 
 export interface RecorderCommandMessage {
   type: 'LLMCH_RECORDER_COMMAND';
+  requestId: string;
   providerId: ProviderId;
   sourceSessionId: string;
   pageUrl: string;
