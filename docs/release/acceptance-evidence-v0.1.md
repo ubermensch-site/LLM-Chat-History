@@ -20,7 +20,7 @@ Status meanings:
 | 8. User can search archived text locally | PASS | Ranked full-text search/navigation tests PASS. |
 | 9. Markdown export is readable and preserves common formatting | LIVE REQUIRED | Export tests + DOM-to-Markdown structural serializer tests PASS; live ChatGPT semantic DOM mapping remains required. |
 | 10. JSON export round-trips normalized archive model | PASS | Validation, fresh restore, idempotent re-import, cross-install merge and privacy-boundary tests PASS. |
-| 11. Storage health/errors are visible | PASS | Recorder storage/adaptor health UI + diagnostics tests PASS. |
+| 11. Storage health/errors are visible | PASS | Recorder storage/adapter health UI + diagnostics tests PASS. |
 | 12. No network service is required for core recording/search/export | PASS | Hardened distribution verifier rejects network APIs; security review PASS. |
 | 13. Material-based UI is usable without covering chat | LIVE REQUIRED | Compact pill + minimize/hide implementation and UI state tests PASS; actual provider-page placement remains live QA. |
 | 14. Automated tests exist for normalization/dedupe/state/export | PASS | Full unit/integration/stress suite green in CI. |
@@ -33,12 +33,30 @@ Status meanings:
 
 ### Existing long-thread historical harvest
 
-**BLOCKED / RESCOPE REQUIRED.** The extension reliably accumulates rendered/visited windows and synthetic virtualization coverage exceeds 1,000 turns, but it does not yet expose a deliberate first-time scroll-and-harvest workflow that guarantees traversal of an already-long conversation. Do not treat virtualization stress coverage as proof of historical import completeness.
+**LIVE REQUIRED.** Explicit first-time scroll-and-harvest is implemented in `main` as of `ea8d09a`.
+
+Automated evidence now covers:
+
+- a deliberate **Import history** recorder action rather than silent scrolling;
+- import only while recording and not while an assistant response is streaming;
+- bounded upward-then-downward traversal with stable top/bottom detection;
+- overlapping virtualized windows by construction;
+- canonical retry/dedupe persistence for every harvested window;
+- conversation-change abort;
+- restoration of the user's original distance-from-bottom even on failure;
+- a 500-window safety cap;
+- a 1,002-turn synthetic virtualized-history traversal;
+- lazy older-history expansion at the top;
+- failure restoration and truncation behavior.
+
+The first CI run caught a real defect where a 240px minimum scroll step could exceed a small viewport and skip virtualized windows. The algorithm was corrected so every step is strictly less than the current viewport height; the unchanged long-history tests then passed.
+
+This capability still requires authenticated live validation against current ChatGPT virtualization/lazy-loading behavior before release approval.
 
 ### Packaging/security
 
-**PASS.** The release branch produces a deterministic v0.1.0 ZIP, verifies CRC/content/checksum, enforces production no-source-map policy, minimal permissions, explicit CSP, no dynamic-code/HTML sinks and no v0.1 network APIs.
+**PASS.** The release build produces a deterministic v0.1.0 ZIP, verifies CRC/content/checksum, enforces production no-source-map policy, minimal permissions, explicit CSP, no dynamic-code/HTML sinks and no v0.1 network APIs.
 
 ## Release decision
 
-The repository is in **release-candidate preparation** state, not production-ready state. Do not tag/publish v0.1.0 until the live-required criteria pass and the historical-harvest gate is implemented/validated or explicitly re-scoped with a documented product decision.
+The repository is in **release-candidate preparation** state, not production-ready state. The historical-import implementation gap is closed; do not tag/publish v0.1.0 until the remaining live-required ChatGPT scenarios pass on an authenticated browser session.
