@@ -51,6 +51,7 @@ function validReport(): LiveQaReport {
       conversationFound: true,
       messageCount: 4,
       eventCount: 7,
+      visibleActivityCount: 3,
       recordingState: 'recording'
     },
     privacy: {
@@ -63,10 +64,14 @@ function validReport(): LiveQaReport {
 }
 
 describe('evaluateLiveQaEvidence', () => {
-  it('passes a healthy content-free conversation snapshot', () => {
+  it('passes a healthy content-free conversation snapshot with count-only visible activity evidence', () => {
     const result = evaluateLiveQaEvidence(validReport(), { expectedExtensionVersion: '0.1.0' });
     expect(result.schemaValid).toBe(true);
     expect(result.structuralPass).toBe(true);
+    expect(result.summary.archiveVisibleActivityCount).toBe(3);
+    expect(result.checks).toContainEqual(
+      expect.objectContaining({ id: 'archive.visible-activity', status: 'pass' })
+    );
     expect(result.checks.some((check) => check.status === 'fail')).toBe(false);
   });
 
@@ -75,6 +80,15 @@ describe('evaluateLiveQaEvidence', () => {
     const result = evaluateLiveQaEvidence(report);
     expect(result.schemaValid).toBe(false);
     expect(result.structuralPass).toBe(false);
+  });
+
+  it('rejects visible activity text in the count-only archive evidence object', () => {
+    const report = validReport() as unknown as Record<string, unknown>;
+    const archive = report.archive as Record<string, unknown>;
+    archive.visibleActivityText = 'must-not-appear-in-qa';
+    const result = evaluateLiveQaEvidence(report);
+    expect(result.schemaValid).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('must-not-appear-in-qa');
   });
 
   it('fails when privacy flags declare protected content present', () => {
@@ -125,6 +139,7 @@ describe('evaluateLiveQaEvidence', () => {
     const result = evaluateLiveQaEvidence(validReport(), { expectedExtensionVersion: '0.1.0' });
     const markdown = renderLiveQaEvidenceMarkdown(result);
     expect(markdown).toContain('Structural result: **PASS**');
+    expect(markdown).toContain('Archived visible-activity count is 3');
     expect(markdown).toContain('This validates one privacy-safe structural snapshot only');
     expect(markdown).not.toContain('chatgpt.com');
     expect(markdown).not.toContain('private-secret');
