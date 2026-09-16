@@ -76,6 +76,18 @@ export interface RecorderCommandMessage {
   observedAt: string;
 }
 
+export interface CreateCheckpointMessage {
+  type: 'LLMCH_CREATE_CHECKPOINT';
+  requestId: string;
+  providerId: ProviderId;
+  sourceSessionId: string;
+  pageUrl: string;
+  identity: ProviderConversationIdentity;
+  name: string;
+  note: string | null;
+  observedAt: string;
+}
+
 export interface OpenLibraryMessage {
   type: 'LLMCH_OPEN_LIBRARY';
 }
@@ -87,6 +99,7 @@ export interface ShowRecorderMessage {
 export type ContentToBackgroundRequest =
   | ContentToBackgroundMessage
   | RecorderCommandMessage
+  | CreateCheckpointMessage
   | OpenLibraryMessage;
 
 export type BackgroundToContentMessage = ShowRecorderMessage;
