@@ -82,6 +82,23 @@ function hasGenerationControl(): boolean {
   return GENERATION_CONTROL_SELECTORS.some((selector) => document.querySelector(selector));
 }
 
+function isVerticallyScrollable(element: HTMLElement): boolean {
+  const style = getComputedStyle(element);
+  return (
+    /^(auto|scroll|overlay)$/.test(style.overflowY) &&
+    element.scrollHeight > element.clientHeight + 4
+  );
+}
+
+function nearestScrollableAncestor(element: Element): HTMLElement | null {
+  let current = element.parentElement;
+  while (current) {
+    if (isVerticallyScrollable(current)) return current;
+    current = current.parentElement;
+  }
+  return null;
+}
+
 export class ChatGptAdapter implements ProviderAdapter {
   readonly providerId = 'chatgpt' as const;
   private readonly healthMonitor = new ChatGptHealthMonitor();
@@ -109,6 +126,17 @@ export class ChatGptAdapter implements ProviderAdapter {
       .replace(/^ChatGPT\s*[|·-]\s*/i, '')
       .trim();
     return title && title.toLowerCase() !== 'chatgpt' ? title : null;
+  }
+
+  getConversationScrollContainer(): HTMLElement | null {
+    const turns = collectTurnElements();
+    for (const turn of turns) {
+      const scrollable = nearestScrollableAncestor(turn);
+      if (scrollable) return scrollable;
+    }
+
+    const fallback = document.scrollingElement;
+    return fallback instanceof HTMLElement ? fallback : document.documentElement;
   }
 
   scanRenderedTurns(): ProviderTurnObservation[] {
