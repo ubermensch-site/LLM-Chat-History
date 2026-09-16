@@ -53,9 +53,19 @@ function migrateToV2(db: IDBDatabase): void {
   projects.createIndex(INDEXES.projects.name, 'name', { unique: false });
 }
 
+function migrateToV3(db: IDBDatabase): void {
+  const checkpoints = db.createObjectStore(STORES.checkpoints, { keyPath: 'id' });
+  checkpoints.createIndex(
+    INDEXES.checkpoints.conversationTime,
+    ['conversationId', 'createdAt'],
+    { unique: false }
+  );
+}
+
 export function applyArchiveMigrations(db: IDBDatabase, oldVersion: number): void {
   if (oldVersion < 1) migrateToV1(db);
   if (oldVersion < 2) migrateToV2(db);
+  if (oldVersion < 3) migrateToV3(db);
 }
 
 export function openArchiveDb(options: OpenArchiveDbOptions = {}): Promise<IDBDatabase> {
