@@ -1,6 +1,8 @@
 import { exportFilename, renderJsonExport, renderMarkdownExport } from '../export/export';
+import { parseJsonArchiveExport } from '../import/json-import';
 import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
+import { importArchiveBundle } from '../storage/import';
 import type { ArchiveConversation, ArchiveMessage } from '../storage/schema';
 import { filterLibraryRecords, type LibraryRecord } from './search';
 
@@ -33,13 +35,22 @@ const meta = byId<HTMLParagraphElement>('meta');
 const transcript = byId<HTMLElement>('transcript');
 const downloadMarkdown = byId<HTMLButtonElement>('download-md');
 const downloadJson = byId<HTMLButtonElement>('download-json');
+const importJson = byId<HTMLButtonElement>('import-json');
+const importFile = byId<HTMLInputElement>('import-file');
+const importStatus = byId<HTMLParagraphElement>('import-status');
 
+let database: IDBDatabase;
 let repository: ArchiveRepository;
 let records: LibraryRecord[] = [];
 let selectedConversationId: string | null = null;
 
 function selectedRecord(): LibraryRecord | undefined {
   return records.find((record) => record.conversation.id === selectedConversationId);
+}
+
+function setImportStatus(message: string, error = false): void {
+  importStatus.textContent = message;
+  importStatus.classList.toggle('error', error);
 }
 
 function setEmptyTranscript(message: string): void {
@@ -169,6 +180,29 @@ async function currentBundle(): Promise<{
   };
 }
 
+async function importSelectedFile(file: File): Promise<void> {
+  importJson.disabled = true;
+  setImportStatus(`Validating ${file.name}…`);
+  try {
+    const parsed = parseJsonArchiveExport(await file.text());
+    const result = await importArchiveBundle(database, parsed);
+    await loadRecords();
+    selectConversation(result.conversationId);
+    const action = result.created ? 'Imported' : 'Merged';
+    setImportStatus(
+      `${action} ${parsed.conversation.title || 'Untitled conversation'} · ${result.messagesAdded} messages added${
+        result.messagesUpdated ? ` · ${result.messagesUpdated} updated` : ''
+      }`
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[LLM Chat History] JSON import failed', error);
+    setImportStatus(`Import failed: ${message}`, true);
+  } finally {
+    importJson.disabled = false;
+  }
+}
+
 searchInput.addEventListener('input', renderConversationList);
 
 downloadMarkdown.addEventListener('click', () => {
@@ -191,9 +225,18 @@ downloadJson.addEventListener('click', () => {
   });
 });
 
+importJson.addEventListener('click', () => importFile.click());
+importFile.addEventListener('change', () => {
+  const file = importFile.files?.[0];
+  importFile.value = '';
+  if (file) void importSelectedFile(file);
+});
+
 void openArchiveDb()
   .then((db) => {
+    database = db;
     repository = new ArchiveRepository(db);
+    importJson.disabled = false;
     return loadRecords();
   })
   .catch((error: unknown) => {
@@ -201,5 +244,9 @@ void openArchiveDb()
     count.textContent = 'Archive unavailable';
     title.textContent = 'Unable to open local archive';
     meta.textContent = error instanceof Error ? error.message : String(error);
-    setEmptyTranscript('The local archive could not be opened. Reload this page after resolving the storage error.');
+    importJson.disabled = true;
+    setImportStatus('Import unavailable while local storage is inaccessible.', true);
+    setEmptyTranscript(
+      'The local archive could not be opened. Reload this page after resolving the storage error.'
+    );
   });
