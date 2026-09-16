@@ -102,6 +102,21 @@ export interface RefreshMirrorMessage {
   conversationId: string;
 }
 
+export interface LiveQaStatusMessage {
+  type: 'LLMCH_LIVE_QA_STATUS';
+  providerId: ProviderId;
+  sourceSessionId: string;
+  pageUrl: string;
+  identity: ProviderConversationIdentity;
+}
+
+export interface LiveQaArchiveStatus {
+  conversationFound: boolean;
+  messageCount: number;
+  eventCount: number;
+  recordingState: RecorderState | null;
+}
+
 export interface ShowRecorderMessage {
   type: 'LLMCH_SHOW_RECORDER';
 }
@@ -111,7 +126,8 @@ export type ContentToBackgroundRequest =
   | RecorderCommandMessage
   | CreateCheckpointMessage
   | OpenLibraryMessage
-  | RefreshMirrorMessage;
+  | RefreshMirrorMessage
+  | LiveQaStatusMessage;
 
 export type BackgroundToContentMessage = ShowRecorderMessage;
 
@@ -120,4 +136,5 @@ export interface BackgroundAck {
   error?: string;
   recordingState?: RecorderState;
   persistedAt?: string;
+  liveQaStatus?: LiveQaArchiveStatus;
 }
