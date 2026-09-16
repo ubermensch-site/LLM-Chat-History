@@ -27,8 +27,18 @@ Current repository evidence:
 - [x] Unpacked extension artifact upload proven in CI.
 - [x] Packaged `llm-chat-history-v0.1.0.zip` artifact upload proven in CI.
 - [x] Historical-import 1,002-turn/lazy-load/failure-restoration/truncation tests green.
+- [x] Privacy-safe live QA report secret-injection tests green.
+- [x] QA archive-status response is count/state only and contains no message/title/URL payload.
 
 These prove implementation quality but do not replace the final exact-candidate gate after live QA.
+
+Latest green candidate containing the built-in QA report:
+
+- CI run: `35095244062`;
+- packaged artifact: `llm-chat-history-v0.1-release-6683cca03fc5903b458b842f7a1888c19ffab184`;
+- packaged artifact digest: `sha256:355a128a3ffd93cf948dc6e2dc4c226711ddb8d5df71b75f5807c1836b80b0a3`;
+- unpacked artifact: `llm-chat-history-unpacked-6683cca03fc5903b458b842f7a1888c19ffab184`;
+- unpacked artifact digest: `sha256:58943d194b4bf5b27d058f919ec8987d452800038d4112cce26caec740e2183c`.
 
 ## 3. Package inspection
 
@@ -59,11 +69,12 @@ For the exact final candidate ZIP after live QA:
 - [x] Changelog/release notes: `CHANGELOG.md`.
 - [x] PRD acceptance evidence matrix: `docs/release/acceptance-evidence-v0.1.md`.
 - [x] Live ChatGPT QA protocol: `docs/qa/live-chatgpt-validation.md`.
+- [x] Live QA report schema/privacy guide: `docs/qa/live-qa-report.md`.
 - [ ] final release notes updated with exact validated artifact checksum and QA environment.
 
 ## 5. Authenticated live ChatGPT QA — BLOCKING
 
-Issue #3 is the source of truth.
+Issue #3 is the source of truth. Use the recorder's **QA report** before/after scenarios where state/count changes matter; see `docs/qa/live-qa-report.md`.
 
 - [ ] Existing-conversation baseline passes.
 - [ ] New-chat provisional → stable identity promotion passes.
@@ -79,6 +90,7 @@ Issue #3 is the source of truth.
 - [ ] Library/search/Markdown/JSON smoke test passes.
 - [ ] Current semantic selectors/IDs documented without private content.
 - [ ] Adapter health remains healthy/degraded as expected; no silent selector failure.
+- [ ] QA report before/after files contain no raw URL/title/provider ID/chat content and provide usable archive counts/state evidence.
 
 ## 6. Historical long-thread import — IMPLEMENTED / LIVE VALIDATION REQUIRED
 
@@ -113,6 +125,7 @@ The first CI run caught a real skipped-window bug caused by a 240px minimum step
 - [ ] unsafe links/content do not become executable UI.
 - [ ] pause test confirms omitted text absent from Markdown and JSON.
 - [ ] diagnostics download contains no conversation text/URL/title/checkpoint notes.
+- [ ] live QA report contains no message text/title/raw URL/provider conversation ID/tag/checkpoint content.
 - [ ] performance report contains aggregate metadata only.
 - [ ] Library Delete warning clearly states browser-only deletion scope.
 - [ ] filesystem mirror permission loss shows warning without affecting canonical capture.
