@@ -7,7 +7,7 @@ import {
   openMirrorSettingsDb,
   pickAndStoreDirectory,
   queryDirectoryHealth,
-  requestStoredDirectoryPermission,
+  requestDirectoryPermission,
   storeDirectoryHandle
 } from './connection';
 
@@ -65,7 +65,7 @@ describe('filesystem folder connection', () => {
     expect(healthFromPermission('Archive', 'denied').state).toBe('denied');
   });
 
-  it('persists and disconnects a stored directory handle independently of chat data', async () => {
+  it('persists and disconnects the serializable directory-handle value independently of chat data', async () => {
     const db = await createDb();
     const plainHandle = { kind: 'directory', name: 'LLM Archive' } as FileSystemDirectoryHandle;
     await storeDirectoryHandle(db, plainHandle);
@@ -92,27 +92,23 @@ describe('filesystem folder connection', () => {
   });
 
   it('requests permission only through the explicit reconnect operation', async () => {
-    const db = await createDb();
-    const persisted = { kind: 'directory', name: 'Archive' } as FileSystemDirectoryHandle;
-    await storeDirectoryHandle(db, persisted);
+    let requests = 0;
+    const permissionHandle = {
+      kind: 'directory',
+      name: 'Archive',
+      queryPermission: async () => 'prompt',
+      requestPermission: async () => {
+        requests += 1;
+        return 'granted';
+      }
+    } as unknown as FileSystemDirectoryHandle;
 
-    const restored = await getStoredDirectoryHandle(db);
-    expect(restored?.name).toBe('Archive');
-
-    const permissionHandle = handle('Archive', 'prompt', 'granted');
-    await storeDirectoryHandle(db, permissionHandle).catch(() => undefined);
-    const fakeDb = await createDb();
-    const storable = { kind: 'directory', name: 'Archive' } as FileSystemDirectoryHandle;
-    await storeDirectoryHandle(fakeDb, storable);
-
-    // requestStoredDirectoryPermission is exercised with a handle that supplies the browser permission methods.
-    const objectStore = fakeDb.transaction('settings', 'readwrite').objectStore('settings');
-    objectStore.put({ key: 'archive-directory', value: permissionHandle });
-    const health = await requestStoredDirectoryPermission(
-      fakeDb,
+    const health = await requestDirectoryPermission(
+      permissionHandle,
       targetWithPicker(async () => permissionHandle)
     );
     expect(health.state).toBe('connected');
+    expect(requests).toBe(1);
   });
 
   it('does not replace the previous connection when the picker is canceled', async () => {
