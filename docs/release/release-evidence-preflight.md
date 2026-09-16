@@ -48,17 +48,38 @@ A successful run prints:
 Release QA preflight PASS: 10 scenarios, <N> report(s)
 ```
 
-and creates:
+and creates both:
 
 ```text
 qa-evidence/v0.1/release-qa-preflight.md
+qa-evidence/v0.1/release-approval.json
 ```
 
-The Markdown summary is safe to paste into issue #3 / TASK-054 because it contains candidate metadata, environment information, scenario statuses, report counts, and the explicit limitation that preflight does not replay provider interactions.
+`release-qa-preflight.md` is safe to paste into issue #3 / TASK-054 because it contains candidate metadata, environment information, scenario statuses, report counts, and the explicit limitation that preflight does not replay provider interactions.
+
+`release-approval.json` is the machine-readable release approval record. It contains only:
+
+- candidate commit/version/artifact names and SHA-256 digests;
+- CI run ID;
+- browser/browser version/OS;
+- test timestamp and tester;
+- scenario count;
+- validated QA report count;
+- `allScenariosPass: true`.
+
+It does **not** copy any live QA report DOM details or conversation data. The final release/tag process should consume this approval record instead of manually retyping candidate metadata.
+
+Custom output paths are optional:
+
+```bash
+npm run release:preflight -- --evidence qa-evidence/v0.1 \
+  --output qa-evidence/v0.1/release-qa-preflight.md \
+  --approval-output qa-evidence/v0.1/release-approval.json
+```
 
 ## 5. What the preflight rejects
 
-The command fails if any of the following is true:
+The command fails before either approval output is written if any of the following is true:
 
 - session/report schema is missing or has extra fields;
 - a QA report claims privacy-bearing fields are present;
@@ -79,4 +100,5 @@ A successful preflight is necessary but not sufficient for the final v0.1 releas
 1. issue #3 contains authenticated live evidence for all scenarios;
 2. TASK-054 records the approved candidate SHA/artifact/checksums/environment;
 3. the full CI/package/security gate passes for the final approved commit;
-4. the release tag/package is created from that approved commit only.
+4. `release-approval.json` matches the exact approved candidate and QA environment;
+5. the release tag/package is created from that approved commit only.
