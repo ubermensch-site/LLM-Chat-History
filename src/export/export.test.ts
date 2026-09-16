@@ -47,6 +47,24 @@ const messages: ArchiveMessage[] = [
     markdown: '**Answer**',
     partial: false,
     modelLabel: 'GPT-5.6 Sol',
+    visibleActivities: [
+      {
+        providerActivityId: 'a1:visible:0:think',
+        kind: 'reasoning-summary',
+        text: 'Thinking',
+        orderHint: 0,
+        firstObservedAt: '2026-09-16T10:05:40.000Z',
+        lastObservedAt: '2026-09-16T10:05:41.000Z'
+      },
+      {
+        providerActivityId: 'a1:visible:1:tool',
+        kind: 'tool',
+        text: 'Fetched branch files\nChecked CI status',
+        orderHint: 1,
+        firstObservedAt: '2026-09-16T10:05:45.000Z',
+        lastObservedAt: '2026-09-16T10:05:46.000Z'
+      }
+    ],
     contentHash: 'h2',
     firstObservedAt: '2026-09-16T10:06:00.000Z',
     lastObservedAt: '2026-09-16T10:06:00.000Z',
@@ -79,7 +97,7 @@ const events: ArchiveEvent[] = [
 ];
 
 describe('archive export', () => {
-  it('renders readable Markdown with state boundaries and visible model labels', () => {
+  it('renders readable Markdown with state boundaries, visible model labels and work timeline', () => {
     const markdown = renderMarkdownExport({
       conversation,
       messages,
@@ -92,12 +110,20 @@ describe('archive export', () => {
     expect(markdown).toContain('## Assistant');
     expect(markdown).toContain('**Answer**');
     expect(markdown).toContain('**Model shown by provider:** GPT-5.6 Sol');
+    expect(markdown).toContain('**Visible activity entries:** 2');
+    expect(markdown).toContain('### What the provider showed while working');
+    expect(markdown).toContain('**Visible reasoning summary**');
+    expect(markdown).toContain('> Thinking');
+    expect(markdown).toContain('**Visible work step**');
+    expect(markdown).toContain('> Fetched branch files');
+    expect(markdown).toContain('> Checked CI status');
+    expect(markdown).toContain('Hidden/private chain-of-thought is not available');
     expect(markdown).toContain('Recording paused');
     expect(markdown).toContain('Recording resumed');
     expect(markdown).not.toContain('private-turn');
   });
 
-  it('exports normalized JSON including schema metadata and visible model labels', () => {
+  it('exports normalized JSON including model labels and visible activity', () => {
     const json = JSON.parse(
       renderJsonExport({
         conversation,
@@ -111,6 +137,10 @@ describe('archive export', () => {
     expect(json.schemaVersion).toBe(1);
     expect(Array.isArray(json.messages)).toBe(true);
     expect(json.messages[1]?.modelLabel).toBe('GPT-5.6 Sol');
+    expect(json.messages[1]?.visibleActivities?.map((activity) => activity.text)).toEqual([
+      'Thinking',
+      'Fetched branch files\nChecked CI status'
+    ]);
   });
 
   it('builds deterministic filesystem-safe filenames', () => {
