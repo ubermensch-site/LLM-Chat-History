@@ -126,7 +126,11 @@ function enqueueObservation(observation: ProviderObservation): void {
     for (const turn of observation.turns) renderedTurnIds.add(turn.providerTurnId);
     pill.update({ turnCount: renderedTurnIds.size });
   } else if (observation.type === 'health') {
-    pill.update({ health: observation.health.state });
+    pill.update({
+      health: observation.health.state,
+      healthCode: observation.health.code,
+      healthDetail: observation.health.detail ?? null
+    });
   } else if (observation.type === 'conversation') {
     const nextKey = observationConversationKey(observation);
     if (nextKey !== activeConversationKey) {
@@ -163,5 +167,9 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 if (adapter.matchesLocation(new URL(location.href))) {
   adapter.observe(enqueueObservation);
 } else {
-  pill.update({ health: 'error' });
+  pill.update({
+    health: 'error',
+    healthCode: 'unsupported-location',
+    healthDetail: 'The active page is not a supported ChatGPT conversation location.'
+  });
 }
