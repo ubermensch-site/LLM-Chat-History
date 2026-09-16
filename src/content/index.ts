@@ -3,6 +3,7 @@ import type {
   BackgroundAck,
   BackgroundToContentMessage,
   ContentToBackgroundMessage,
+  CreateCheckpointMessage,
   OpenLibraryMessage,
   ProviderObservation,
   RecorderCommand,
@@ -20,6 +21,7 @@ let sendQueue: Promise<unknown> = Promise.resolve();
 
 const pill = mountRecorderPill({
   onCommand: (command) => sendRecorderCommand(command),
+  onCheckpoint: (name, note) => sendCheckpoint(name, note),
   onOpenLibrary: () => openLibrary()
 });
 
@@ -44,7 +46,7 @@ function applyAck(ack: BackgroundAck | undefined): void {
 }
 
 async function sendRequest(
-  message: ContentToBackgroundMessage | RecorderCommandMessage,
+  message: ContentToBackgroundMessage | RecorderCommandMessage | CreateCheckpointMessage,
   retry: boolean
 ): Promise<void> {
   const operation = async () => {
@@ -86,6 +88,32 @@ async function sendRecorderCommand(command: RecorderCommand): Promise<void> {
   } catch (error) {
     pill.update({ storageHealth: 'error' });
     console.warn('[LLM Chat History] recorder command failed after retries', error);
+    throw error;
+  }
+}
+
+async function sendCheckpoint(name: string, note: string | null): Promise<void> {
+  await sendQueue;
+  const identity = adapter.getConversationIdentity();
+  if (!identity) throw new Error('No supported conversation is active');
+  const observedAt = new Date().toISOString();
+  const message: CreateCheckpointMessage = {
+    type: 'LLMCH_CREATE_CHECKPOINT',
+    requestId: crypto.randomUUID(),
+    providerId: adapter.providerId,
+    sourceSessionId,
+    pageUrl: location.href,
+    identity,
+    name,
+    note,
+    observedAt
+  };
+
+  try {
+    await sendRequest(message, true);
+  } catch (error) {
+    pill.update({ storageHealth: 'error' });
+    console.warn('[LLM Chat History] checkpoint persistence failed after retries', error);
     throw error;
   }
 }

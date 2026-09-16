@@ -1,3 +1,4 @@
+import type { ArchiveCheckpoint } from '../storage/checkpoints';
 import { conversationDisplayTitle } from '../storage/conversation';
 import type { ArchiveMessage } from '../storage/schema';
 import type { LibraryRecord } from './search';
@@ -8,12 +9,14 @@ export type LibrarySearchField =
   | 'project'
   | 'folder'
   | 'tag'
+  | 'checkpoint'
   | 'message';
 
 export interface LibrarySearchResult {
-  kind: 'conversation' | 'message';
+  kind: 'conversation' | 'checkpoint' | 'message';
   conversationId: string;
   messageId?: string;
+  checkpointId?: string;
   field: LibrarySearchField;
   score: number;
   title: string;
@@ -40,10 +43,11 @@ function snippet(value: string, query: string, radius = 72): string {
   if (!compact) return '';
   const normalizedValue = compact.toLocaleLowerCase();
   const tokens = queryTokens(query);
-  const firstIndex = tokens
-    .map((token) => normalizedValue.indexOf(token))
-    .filter((index) => index >= 0)
-    .sort((a, b) => a - b)[0] ?? 0;
+  const firstIndex =
+    tokens
+      .map((token) => normalizedValue.indexOf(token))
+      .filter((index) => index >= 0)
+      .sort((a, b) => a - b)[0] ?? 0;
   const start = Math.max(0, firstIndex - radius);
   const end = Math.min(compact.length, firstIndex + radius);
   return `${start > 0 ? '…' : ''}${compact.slice(start, end)}${end < compact.length ? '…' : ''}`;
@@ -81,6 +85,27 @@ function metadataResult(record: LibraryRecord, query: string): LibrarySearchResu
   };
 }
 
+function checkpointResult(
+  record: LibraryRecord,
+  checkpoint: ArchiveCheckpoint,
+  query: string
+): LibrarySearchResult | null {
+  const tokens = queryTokens(query);
+  const text = `${checkpoint.name}\n${checkpoint.note ?? ''}`;
+  if (!tokens.length || !containsEveryToken(text, tokens)) return null;
+  return {
+    kind: 'checkpoint',
+    conversationId: record.conversation.id,
+    checkpointId: checkpoint.id,
+    field: 'checkpoint',
+    score: 60,
+    title: conversationDisplayTitle(record.conversation),
+    snippet: snippet(text, query),
+    updatedAt: checkpoint.updatedAt,
+    orderHint: Number.MAX_SAFE_INTEGER - 1
+  };
+}
+
 function messageResult(
   record: LibraryRecord,
   message: ArchiveMessage,
@@ -112,6 +137,10 @@ export function searchLibraryRecords(
   for (const record of records) {
     const metadata = metadataResult(record, query);
     if (metadata) results.push(metadata);
+    for (const checkpoint of record.checkpoints ?? []) {
+      const result = checkpointResult(record, checkpoint, query);
+      if (result) results.push(result);
+    }
     for (const message of record.messages) {
       const result = messageResult(record, message, query);
       if (result) results.push(result);
@@ -124,6 +153,6 @@ export function searchLibraryRecords(
       b.updatedAt.localeCompare(a.updatedAt) ||
       a.conversationId.localeCompare(b.conversationId) ||
       a.orderHint - b.orderHint ||
-      (a.messageId ?? '').localeCompare(b.messageId ?? '')
+      (a.checkpointId ?? a.messageId ?? '').localeCompare(b.checkpointId ?? b.messageId ?? '')
   );
 }

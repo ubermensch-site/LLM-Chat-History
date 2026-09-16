@@ -1,3 +1,4 @@
+import type { ArchiveCheckpoint } from '../storage/checkpoints';
 import { conversationDisplayTitle } from '../storage/conversation';
 import type { ArchiveConversation, ArchiveMessage, ArchiveProject } from '../storage/schema';
 
@@ -5,6 +6,7 @@ export interface LibraryRecord {
   conversation: ArchiveConversation;
   messages: ArchiveMessage[];
   project: ArchiveProject | undefined;
+  checkpoints?: ArchiveCheckpoint[];
 }
 
 function normalized(value: string): string {
@@ -33,7 +35,10 @@ export function matchesLibraryQuery(record: LibraryRecord, query: string): boole
     .toLocaleLowerCase();
 
   if (metadata.includes(needle)) return true;
-  return record.messages.some((message) => normalized(message.plainText).includes(needle));
+  if (record.messages.some((message) => normalized(message.plainText).includes(needle))) return true;
+  return (record.checkpoints ?? []).some((checkpoint) =>
+    normalized(`${checkpoint.name}\n${checkpoint.note ?? ''}`).includes(needle)
+  );
 }
 
 export function filterLibraryRecords(records: LibraryRecord[], query: string): LibraryRecord[] {

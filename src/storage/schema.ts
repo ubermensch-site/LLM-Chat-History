@@ -94,6 +94,7 @@ export type ArchiveEventType =
   | 'recording-resumed'
   | 'recording-stopped'
   | 'turn-suppressed'
+  | 'checkpoint'
   | 'adapter-health';
 
 export interface ArchiveEvent {

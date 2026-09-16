@@ -77,12 +77,7 @@ export async function deleteConversationCascade(
   const conversationRequest = conversations.get(conversationId);
   const messageKeysRequest = messages
     .index(INDEXES.messages.conversationOrder)
-    .getAllKeys(
-      IDBKeyRange.bound(
-        [conversationId, 0],
-        [conversationId, Number.MAX_SAFE_INTEGER]
-      )
-    );
+    .getAllKeys(IDBKeyRange.bound([conversationId, 0], [conversationId, Number.MAX_SAFE_INTEGER]));
   const eventKeysRequest = events
     .index(INDEXES.events.conversationTime)
     .getAllKeys(IDBKeyRange.bound([conversationId, ''], [conversationId, '\uffff']));

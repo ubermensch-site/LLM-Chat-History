@@ -1,4 +1,5 @@
 import { ArchiveRepository } from '../storage/archive';
+import { listCheckpoints } from '../storage/checkpoints';
 import { openArchiveDb } from '../storage/db';
 import { listProjects } from '../storage/projects';
 import type { ArchiveProject } from '../storage/schema';
@@ -36,7 +37,7 @@ style.textContent = `
   .search-result-meta { display: block; margin-top: 3px; font-size: 11px; color: var(--on-surface-variant); text-transform: capitalize; }
   .search-result-snippet { display: block; margin-top: 5px; font-size: 12px; line-height: 1.35; color: var(--on-surface-variant); overflow-wrap: anywhere; }
   .search-result-empty { padding: 10px; font-size: 12px; color: var(--on-surface-variant); }
-  .message.search-hit { outline: 3px solid var(--primary); outline-offset: 3px; }
+  .message.search-hit, .checkpoint-marker.search-hit { outline: 3px solid var(--primary); outline-offset: 3px; }
 `;
 document.head.append(style);
 
@@ -76,7 +77,8 @@ async function loadRecords(): Promise<LibraryRecord[]> {
     conversations.map(async (conversation): Promise<LibraryRecord> => ({
       conversation,
       messages: await repository.listMessages(conversation.id),
-      project: conversation.projectId ? projectMap.get(conversation.projectId) : undefined
+      project: conversation.projectId ? projectMap.get(conversation.projectId) : undefined,
+      checkpoints: await listCheckpoints(db, conversation.id)
     }))
   );
 }
@@ -85,6 +87,21 @@ function conversationButton(conversationId: string): HTMLButtonElement | undefin
   return [...list.querySelectorAll<HTMLButtonElement>('button[data-conversation-id]')].find(
     (button) => button.dataset.conversationId === conversationId
   );
+}
+
+function clearSearchHits(): void {
+  for (const existing of transcript.querySelectorAll<HTMLElement>('.search-hit')) {
+    existing.classList.remove('search-hit');
+  }
+}
+
+function focusElement(element: HTMLElement): void {
+  clearSearchHits();
+  element.classList.add('search-hit');
+  element.tabIndex = -1;
+  element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  element.focus({ preventScroll: true });
+  setTimeout(() => element.classList.remove('search-hit'), 4_000);
 }
 
 async function focusMessage(conversationId: string, messageId: string): Promise<void> {
@@ -97,16 +114,14 @@ async function focusMessage(conversationId: string, messageId: string): Promise<
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   const cards = transcript.querySelectorAll<HTMLElement>('.message');
   const card = cards[index];
-  if (!card) return;
+  if (card) focusElement(card);
+}
 
-  for (const existing of transcript.querySelectorAll<HTMLElement>('.message.search-hit')) {
-    existing.classList.remove('search-hit');
-  }
-  card.classList.add('search-hit');
-  card.tabIndex = -1;
-  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  card.focus({ preventScroll: true });
-  setTimeout(() => card.classList.remove('search-hit'), 4_000);
+async function focusCheckpoint(checkpointId: string): Promise<void> {
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const selector = `[data-checkpoint-id="${CSS.escape(checkpointId)}"]`;
+  const marker = transcript.querySelector<HTMLElement>(selector);
+  if (marker) focusElement(marker);
 }
 
 async function openResult(result: LibrarySearchResult): Promise<void> {
@@ -115,6 +130,8 @@ async function openResult(result: LibrarySearchResult): Promise<void> {
   button.click();
   if (result.kind === 'message' && result.messageId) {
     await focusMessage(result.conversationId, result.messageId);
+  } else if (result.kind === 'checkpoint' && result.checkpointId) {
+    await focusCheckpoint(result.checkpointId);
   }
 }
 
@@ -129,7 +146,12 @@ function resultButton(result: LibrarySearchResult): HTMLButtonElement {
 
   const meta = document.createElement('span');
   meta.className = 'search-result-meta';
-  meta.textContent = result.kind === 'message' ? 'Message match' : `${result.field} match`;
+  meta.textContent =
+    result.kind === 'message'
+      ? 'Message match'
+      : result.kind === 'checkpoint'
+        ? 'Checkpoint match'
+        : `${result.field} match`;
 
   const snippet = document.createElement('span');
   snippet.className = 'search-result-snippet';
@@ -160,7 +182,7 @@ async function renderSearchResults(): Promise<void> {
     if (!results.length) {
       const empty = document.createElement('div');
       empty.className = 'search-result-empty';
-      empty.textContent = 'No matching conversations or turns in this view.';
+      empty.textContent = 'No matching conversations, checkpoints or turns in this view.';
       resultPanel.replaceChildren(empty);
       count.textContent = `0 search results · ${records.length} conversations in this view`;
       return;
@@ -168,7 +190,8 @@ async function renderSearchResults(): Promise<void> {
 
     resultPanel.replaceChildren(...results.map(resultButton));
     const messageCount = results.filter((result) => result.kind === 'message').length;
-    count.textContent = `${results.length} search results · ${messageCount} turn matches`;
+    const checkpointCount = results.filter((result) => result.kind === 'checkpoint').length;
+    count.textContent = `${results.length} search results · ${checkpointCount} checkpoints · ${messageCount} turn matches`;
   } catch (error) {
     console.error('[LLM Chat History] full-text search failed', error);
     resultPanel.hidden = false;

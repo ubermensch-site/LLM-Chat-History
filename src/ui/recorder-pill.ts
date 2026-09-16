@@ -23,6 +23,7 @@ export interface RecorderPillState {
 
 export interface RecorderPillOptions {
   onCommand?: (command: RecorderCommand) => void | Promise<void>;
+  onCheckpoint?: (name: string, note: string | null) => void | Promise<void>;
   onOpenLibrary?: () => void | Promise<void>;
 }
 
@@ -135,6 +136,11 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
   const primary = document.createElement('button');
   primary.type = 'button';
   primary.className = 'action primary';
+  const checkpoint = document.createElement('button');
+  checkpoint.type = 'button';
+  checkpoint.className = 'action';
+  checkpoint.textContent = 'Checkpoint';
+  checkpoint.setAttribute('aria-label', 'Add a named checkpoint to this local conversation archive');
   const stop = document.createElement('button');
   stop.type = 'button';
   stop.className = 'action danger';
@@ -146,8 +152,8 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
 
   const hint = document.createElement('div');
   hint.className = 'hint';
-  hint.textContent = 'Minimize or Hide only changes this UI. Recording stops only after explicit Stop confirmation. Click the extension toolbar icon to restore a hidden recorder.';
-  actions.append(primary, stop, library);
+  hint.textContent = 'Minimize or Hide only changes this UI. Recording stops only after explicit Stop confirmation. Checkpoints are explicit local notes and can be added while paused or stopped. Click the extension toolbar icon to restore a hidden recorder.';
+  actions.append(primary, checkpoint, stop, library);
   panel.append(header, meta, storage, actions, hint);
 
   const pill = document.createElement('button');
@@ -240,6 +246,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     );
 
     primary.disabled = busy;
+    checkpoint.disabled = busy || !options.onCheckpoint;
     stop.disabled = busy || state.recordingState === 'stopped';
     library.disabled = busy;
   };
@@ -250,6 +257,24 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     render();
     try {
       await options.onCommand(command);
+    } catch {
+      // The content-script transport updates visible health state; avoid an unhandled UI promise.
+    } finally {
+      busy = false;
+      render();
+    }
+  };
+
+  const createCheckpoint = async () => {
+    if (!options.onCheckpoint || busy) return;
+    const name = window.prompt('Checkpoint name');
+    if (name === null || !name.trim()) return;
+    const note = window.prompt('Optional checkpoint note', '');
+    if (note === null) return;
+    busy = true;
+    render();
+    try {
+      await options.onCheckpoint(name.trim(), note.trim() || null);
     } catch {
       // The content-script transport updates visible health state; avoid an unhandled UI promise.
     } finally {
@@ -292,6 +317,9 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
   primary.addEventListener('click', () => {
     const command = primary.dataset.command as RecorderCommand | undefined;
     if (command) void runCommand(command);
+  });
+  checkpoint.addEventListener('click', () => {
+    void createCheckpoint();
   });
   stop.addEventListener('click', armOrConfirmStop);
   library.addEventListener('click', () => {
