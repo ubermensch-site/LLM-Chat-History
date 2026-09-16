@@ -35,7 +35,7 @@ const message: ArchiveMessage = {
   updatedAt: '2026-09-16T10:01:00.000Z'
 };
 
-const record = { conversation, messages: [message] };
+const record = { conversation, messages: [message], project: undefined };
 
 const project: ArchiveProject = {
   id: 'project:storefront',
