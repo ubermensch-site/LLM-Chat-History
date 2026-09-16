@@ -25,6 +25,7 @@ const EVENT_TYPES = new Set<ArchiveEventType>([
   'recording-resumed',
   'recording-stopped',
   'turn-suppressed',
+  'checkpoint',
   'adapter-health'
 ]);
 
@@ -292,6 +293,21 @@ function parseEvent(value: unknown, index: number, conversation: ArchiveConversa
     if (event.id !== expectedId) {
       fail(`${path}.id`, `expected normalized suppression ID ${expectedId}`);
     }
+  }
+
+  if (event.type === 'checkpoint') {
+    if (!event.id.startsWith('checkpoint:')) {
+      fail(`${path}.id`, 'checkpoint ID must start with checkpoint:');
+    }
+    const name = event.data.name;
+    if (typeof name !== 'string' || !name.trim()) {
+      fail(`${path}.data.name`, 'checkpoint requires a non-empty name');
+    }
+    const note = event.data.note;
+    if (note !== null && typeof note !== 'string') {
+      fail(`${path}.data.note`, 'checkpoint note must be a string or null');
+    }
+    timestamp(event.data.updatedAt, `${path}.data.updatedAt`);
   }
 
   return event;
