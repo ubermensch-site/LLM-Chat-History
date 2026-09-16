@@ -84,6 +84,15 @@ function mergedConversation(
     if (provisionalKey) result.provisionalKey = provisionalKey;
     else delete result.provisionalKey;
   }
+
+  const customTitle = existing.customTitle ?? imported.customTitle;
+  if (customTitle) result.customTitle = customTitle;
+  else delete result.customTitle;
+
+  const archivedAt = existing.archivedAt ?? imported.archivedAt;
+  if (archivedAt) result.archivedAt = archivedAt;
+  else delete result.archivedAt;
+
   return result;
 }
 
