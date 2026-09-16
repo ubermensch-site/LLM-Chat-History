@@ -26,6 +26,7 @@ import type {
   ArchiveProject,
   ArchiveProjectFolder
 } from '../storage/schema';
+import { requestMirrorRefresh, requestMirrorRefreshes } from './mirror-refresh';
 import { filterLibraryRecords, type LibraryRecord } from './search';
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -209,7 +210,11 @@ function renderTranscript(record: LibraryRecord): void {
   const conversation = record.conversation;
   const project = record.project;
   const folder = folderById(project, conversation.folderId);
-  const organization = [project?.name ?? 'Unsorted', folder?.name, ...(conversation.tags ?? []).map((tag) => `#${tag}`)]
+  const organization = [
+    project?.name ?? 'Unsorted',
+    folder?.name,
+    ...(conversation.tags ?? []).map((tag) => `#${tag}`)
+  ]
     .filter(Boolean)
     .join(' · ');
   title.textContent = conversationDisplayTitle(conversation);
@@ -377,6 +382,7 @@ async function importSelectedFile(file: File): Promise<void> {
     showingArchived = Boolean(parsed.conversation.archivedAt);
     projectFilterId = 'all';
     await loadRecords(result.conversationId);
+    void requestMirrorRefresh(result.conversationId);
     const action = result.created ? 'Imported' : 'Merged';
     setLibraryStatus(
       `${action} ${conversationDisplayTitle(parsed.conversation)} · ${result.messagesAdded} messages added${
@@ -404,6 +410,7 @@ async function renameSelectedConversation(): Promise<void> {
 
   const updated = await renameConversation(database, record.conversation.id, next || null);
   await loadRecords(updated.id);
+  void requestMirrorRefresh(updated.id);
   setLibraryStatus(
     updated.customTitle
       ? `Renamed to “${updated.customTitle}”.`
@@ -416,9 +423,10 @@ async function toggleArchiveSelectedConversation(): Promise<void> {
   if (!record) return;
   const shouldArchive = !record.conversation.archivedAt;
   const name = conversationDisplayTitle(record.conversation);
-  await setConversationArchived(database, record.conversation.id, shouldArchive);
+  const updated = await setConversationArchived(database, record.conversation.id, shouldArchive);
   selectedConversationId = null;
   await loadRecords(null);
+  void requestMirrorRefresh(updated.id);
   setLibraryStatus(`${shouldArchive ? 'Archived' : 'Unarchived'} “${name}”.`);
 }
 
@@ -456,6 +464,7 @@ async function changeSelectedProject(projectId: string): Promise<void> {
     null
   );
   await loadRecords(updated.id);
+  void requestMirrorRefresh(updated.id);
   setLibraryStatus(projectId ? 'Conversation moved to project.' : 'Conversation moved to Unsorted.');
 }
 
@@ -469,6 +478,7 @@ async function changeSelectedFolder(folderId: string): Promise<void> {
     folderId || null
   );
   await loadRecords(updated.id);
+  void requestMirrorRefresh(updated.id);
   setLibraryStatus(folderId ? 'Folder assignment updated.' : 'Folder assignment cleared.');
 }
 
@@ -478,6 +488,7 @@ async function saveSelectedTags(): Promise<void> {
   const tags = tagsInput.value.split(',');
   const updated = await setConversationTags(database, record.conversation.id, tags);
   await loadRecords(updated.id);
+  void requestMirrorRefresh(updated.id);
   setLibraryStatus(updated.tags?.length ? `Saved ${updated.tags.length} tag(s).` : 'Tags cleared.');
 }
 
@@ -491,6 +502,7 @@ async function createProjectFromUi(): Promise<void> {
   }
   projectFilterId = 'all';
   await loadRecords(record?.conversation.id ?? null);
+  if (record) void requestMirrorRefresh(record.conversation.id);
   setLibraryStatus(`Created project “${project.name}”.`);
 }
 
@@ -500,8 +512,12 @@ async function renameSelectedProjectFromUi(): Promise<void> {
   if (!project) return;
   const name = window.prompt('Rename project', project.name);
   if (name === null) return;
+  const affected = records
+    .filter((entry) => entry.conversation.projectId === project.id)
+    .map((entry) => entry.conversation.id);
   const updated = await renameProject(database, project.id, name);
   await loadRecords(record?.conversation.id ?? null);
+  requestMirrorRefreshes(affected);
   setLibraryStatus(`Renamed project to “${updated.name}”.`);
 }
 
@@ -512,9 +528,13 @@ async function deleteSelectedProjectFromUi(): Promise<void> {
   if (!window.confirm(`Delete project “${project.name}”? Conversations will return to Unsorted and will not be deleted.`)) {
     return;
   }
+  const affected = records
+    .filter((entry) => entry.conversation.projectId === project.id)
+    .map((entry) => entry.conversation.id);
   await deleteProject(database, project.id);
   if (projectFilterId === project.id) projectFilterId = 'all';
   await loadRecords(record?.conversation.id ?? null);
+  requestMirrorRefreshes(affected);
   setLibraryStatus(`Deleted project “${project.name}”; its conversations are now Unsorted.`);
 }
 
@@ -532,6 +552,7 @@ async function createFolderFromUi(): Promise<void> {
     result.folder.id
   );
   await loadRecords(record.conversation.id);
+  void requestMirrorRefresh(record.conversation.id);
   setLibraryStatus(`Created folder “${result.folder.name}”.`);
 }
 
@@ -542,8 +563,15 @@ async function renameSelectedFolderFromUi(): Promise<void> {
   if (!record || !project || !folder) return;
   const name = window.prompt('Rename folder', folder.name);
   if (name === null) return;
+  const affected = records
+    .filter(
+      (entry) =>
+        entry.conversation.projectId === project.id && entry.conversation.folderId === folder.id
+    )
+    .map((entry) => entry.conversation.id);
   await renameProjectFolder(database, project.id, folder.id, name);
   await loadRecords(record.conversation.id);
+  requestMirrorRefreshes(affected);
   setLibraryStatus('Folder renamed.');
 }
 
@@ -555,8 +583,15 @@ async function deleteSelectedFolderFromUi(): Promise<void> {
   if (!window.confirm(`Delete folder “${folder.name}”? Conversations stay in “${project.name}” with no folder.`)) {
     return;
   }
+  const affected = records
+    .filter(
+      (entry) =>
+        entry.conversation.projectId === project.id && entry.conversation.folderId === folder.id
+    )
+    .map((entry) => entry.conversation.id);
   await deleteProjectFolder(database, project.id, folder.id);
   await loadRecords(record.conversation.id);
+  requestMirrorRefreshes(affected);
   setLibraryStatus(`Deleted folder “${folder.name}”; assigned conversations remain in the project.`);
 }
 
