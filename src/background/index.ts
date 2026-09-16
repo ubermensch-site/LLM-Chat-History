@@ -2,6 +2,7 @@ import type {
   BackgroundAck,
   ContentToBackgroundMessage,
   ContentToBackgroundRequest,
+  CreateCheckpointMessage,
   OpenLibraryMessage,
   RecorderCommandMessage,
   ShowRecorderMessage
@@ -54,6 +55,21 @@ function isRecorderCommandMessage(value: unknown): value is RecorderCommandMessa
   );
 }
 
+function isCreateCheckpointMessage(value: unknown): value is CreateCheckpointMessage {
+  if (!hasEnvelopeFields(value)) return false;
+  const candidate = value as Partial<CreateCheckpointMessage>;
+  return (
+    candidate.type === 'LLMCH_CREATE_CHECKPOINT' &&
+    typeof candidate.requestId === 'string' &&
+    candidate.requestId.length > 0 &&
+    Boolean(candidate.identity && typeof candidate.identity === 'object') &&
+    typeof candidate.observedAt === 'string' &&
+    typeof candidate.name === 'string' &&
+    candidate.name.trim().length > 0 &&
+    (candidate.note === null || typeof candidate.note === 'string')
+  );
+}
+
 function isOpenLibraryMessage(value: unknown): value is OpenLibraryMessage {
   return Boolean(
     value &&
@@ -66,6 +82,7 @@ function isKnownRequest(value: unknown): value is ContentToBackgroundRequest {
   return (
     isProviderObservationMessage(value) ||
     isRecorderCommandMessage(value) ||
+    isCreateCheckpointMessage(value) ||
     isOpenLibraryMessage(value)
   );
 }
@@ -114,6 +131,9 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     .then(async (repository) => {
       if (message.type === 'LLMCH_RECORDER_COMMAND') {
         return repository.applyRecorderCommand(message);
+      }
+      if (message.type === 'LLMCH_CREATE_CHECKPOINT') {
+        return repository.createCheckpoint(message);
       }
       return repository.persistObservation(message);
     })
