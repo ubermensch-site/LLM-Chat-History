@@ -8,6 +8,9 @@
     "https://chatgpt.com/*",
     "https://chat.openai.com/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none';"
+  },
   "background": {
     "service_worker": "background.js"
   },
