@@ -92,6 +92,11 @@ export interface OpenLibraryMessage {
   type: 'LLMCH_OPEN_LIBRARY';
 }
 
+export interface RefreshMirrorMessage {
+  type: 'LLMCH_REFRESH_MIRROR';
+  conversationId: string;
+}
+
 export interface ShowRecorderMessage {
   type: 'LLMCH_SHOW_RECORDER';
 }
@@ -100,7 +105,8 @@ export type ContentToBackgroundRequest =
   | ContentToBackgroundMessage
   | RecorderCommandMessage
   | CreateCheckpointMessage
-  | OpenLibraryMessage;
+  | OpenLibraryMessage
+  | RefreshMirrorMessage;
 
 export type BackgroundToContentMessage = ShowRecorderMessage;
 
