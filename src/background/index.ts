@@ -301,14 +301,14 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
         lastPersistenceError: null
       });
 
-      // Filesystem mirroring is optional. Hold the worker alive long enough to attempt
-      // the coalesced write, but never let any mirror failure change the canonical ACK.
-      await mirrorAfterCanonicalPersistence(repository, message);
-
       const ack: BackgroundAck = recordingState
         ? { ok: true, recordingState, persistedAt }
         : { ok: true, persistedAt };
       sendResponse(ack);
+
+      // The canonical ACK is deliberately sent first. Optional filesystem work runs
+      // from the latest IndexedDB state and can coalesce subsequent recorder events.
+      void mirrorAfterCanonicalPersistence(repository, message);
     })
     .catch(async (error: unknown) => {
       const text = error instanceof Error ? error.message : String(error);
