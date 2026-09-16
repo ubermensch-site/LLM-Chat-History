@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:dist": "node scripts/verify-dist.mjs",
-    "package:release": "node scripts/package-release.mjs"
+    "package:release": "node scripts/package-release.mjs",
+    "release:preflight": "node scripts/release-evidence-preflight.mjs"
   },
   "devDependencies": {
     "@types/chrome": "0.3.0",
