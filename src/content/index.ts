@@ -1,5 +1,9 @@
-import { ChatGptAdapter } from '../providers/chatgpt/adapter';
 import { recordPerformanceSample } from '../performance/metrics';
+import { ChatGptAdapter } from '../providers/chatgpt/adapter';
+import {
+  runHistoricalScrollHarvest,
+  type HarvestViewport
+} from '../providers/chatgpt/historical-harvest';
 import type {
   BackgroundAck,
   BackgroundToContentMessage,
@@ -11,7 +15,7 @@ import type {
   RecorderCommandMessage
 } from '../shared/types';
 import { withRetry } from '../transport/retry';
-import { mountRecorderPill } from '../ui/recorder-pill';
+import { mountRecorderPill, type HistoricalImportSummary } from '../ui/recorder-pill';
 
 const adapter = new ChatGptAdapter();
 const sourceSessionId = crypto.randomUUID();
@@ -21,10 +25,12 @@ let activeConversationKey: string | null = null;
 let sendQueue: Promise<unknown> = Promise.resolve();
 let snapshotProfileStartedAt: number | null = null;
 let snapshotRenderedTurnCount = 0;
+let stopAdapterObservation: (() => void) | null = null;
 
 const pill = mountRecorderPill({
   onCommand: (command) => sendRecorderCommand(command),
   onCheckpoint: (name, note) => sendCheckpoint(name, note),
+  onImportHistory: () => importHistoricalConversation(),
   onOpenLibrary: () => openLibrary()
 });
 
@@ -136,7 +142,7 @@ function recordSnapshotProfile(): void {
   });
 }
 
-function enqueueObservation(observation: ProviderObservation): void {
+function applyObservationToRecorder(observation: ProviderObservation): void {
   if (observation.type === 'turn-upsert') {
     renderedTurnIds.add(observation.turn.providerTurnId);
     pill.update({ turnCount: renderedTurnIds.size });
@@ -161,6 +167,10 @@ function enqueueObservation(observation: ProviderObservation): void {
       pill.update({ turnCount: 0 });
     }
   }
+}
+
+function queueObservation(observation: ProviderObservation): Promise<void> {
+  applyObservationToRecorder(observation);
 
   const message: ContentToBackgroundMessage = {
     type: 'LLMCH_PROVIDER_OBSERVATION',
@@ -170,12 +180,84 @@ function enqueueObservation(observation: ProviderObservation): void {
     observation
   };
 
-  sendQueue = sendQueue
-    .then(() => sendRequest(message, observation.type !== 'health'))
-    .catch((error: unknown) => {
-      pill.update({ storageHealth: 'error' });
-      console.warn('[LLM Chat History] observation persistence failed after retries', error);
+  const task = sendQueue.then(() => sendRequest(message, observation.type !== 'health'));
+  sendQueue = task.catch((error: unknown) => {
+    pill.update({ storageHealth: 'error' });
+    console.warn('[LLM Chat History] observation persistence failed after retries', error);
+  });
+  return task;
+}
+
+function enqueueObservation(observation: ProviderObservation): void {
+  void queueObservation(observation).catch(() => undefined);
+}
+
+function startAdapterObservation(): void {
+  stopAdapterObservation?.();
+  stopAdapterObservation = adapter.observe(enqueueObservation);
+}
+
+function asHarvestViewport(element: HTMLElement): HarvestViewport {
+  return {
+    read: () => ({
+      scrollTop: element.scrollTop,
+      scrollHeight: element.scrollHeight,
+      clientHeight: element.clientHeight
+    }),
+    scrollTo: (top) => element.scrollTo({ top, behavior: 'auto' })
+  };
+}
+
+async function waitForHistoricalDomSettle(): Promise<void> {
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+async function importHistoricalConversation(): Promise<HistoricalImportSummary> {
+  await sendQueue;
+  const identity = adapter.getConversationIdentity();
+  if (!identity?.providerConversationId) {
+    throw new Error('Open an existing saved ChatGPT conversation before importing history.');
+  }
+
+  if (adapter.scanRenderedTurns().some((turn) => turn.partial)) {
+    throw new Error('Wait for the assistant response to finish before importing history.');
+  }
+
+  const scrollContainer = adapter.getConversationScrollContainer();
+  if (!scrollContainer) throw new Error('Could not find the ChatGPT conversation scroll area.');
+
+  const providerConversationId = identity.providerConversationId;
+  stopAdapterObservation?.();
+  stopAdapterObservation = null;
+
+  try {
+    const result = await runHistoricalScrollHarvest({
+      viewport: asHarvestViewport(scrollContainer),
+      settle: waitForHistoricalDomSettle,
+      maxWindows: 500,
+      captureWindow: async () => {
+        const currentIdentity = adapter.getConversationIdentity();
+        if (currentIdentity?.providerConversationId !== providerConversationId) {
+          throw new Error('Conversation changed during history import. Import was stopped.');
+        }
+
+        const turns = adapter.scanRenderedTurns();
+        const observedAt = new Date().toISOString();
+        await queueObservation({ type: 'turn-snapshot', turns, observedAt });
+        return turns.map((turn) => turn.providerTurnId);
+      }
     });
+
+    return {
+      windowsScanned: result.windowsScanned,
+      uniqueTurnsSeen: result.uniqueTurnsSeen,
+      complete: result.reachedTop && result.reachedBottom && !result.truncated,
+      truncated: result.truncated
+    };
+  } finally {
+    if (adapter.matchesLocation(new URL(location.href))) startAdapterObservation();
+  }
 }
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
@@ -187,7 +269,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
 });
 
 if (adapter.matchesLocation(new URL(location.href))) {
-  adapter.observe(enqueueObservation);
+  startAdapterObservation();
 } else {
   pill.update({
     health: 'error',
