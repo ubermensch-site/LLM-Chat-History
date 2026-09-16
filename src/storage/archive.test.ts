@@ -1,4 +1,4 @@
-import { indexedDB as fakeIndexedDB } from 'fake-indexeddb';
+import 'fake-indexeddb/auto';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ContentToBackgroundMessage, ProviderObservation } from '../shared/types';
 import { ArchiveRepository } from './archive';
@@ -9,7 +9,7 @@ const opened: Array<{ name: string; repository: ArchiveRepository }> = [];
 
 async function createRepository(): Promise<ArchiveRepository> {
   const name = `llm-chat-history-test-${crypto.randomUUID()}`;
-  const db = await openArchiveDb({ name, factory: fakeIndexedDB });
+  const db = await openArchiveDb({ name, factory: indexedDB });
   const repository = new ArchiveRepository(db);
   opened.push({ name, repository });
   return repository;
@@ -79,14 +79,14 @@ afterEach(async () => {
     const entry = opened.pop();
     if (!entry) continue;
     entry.repository.close();
-    await requestToPromise(fakeIndexedDB.deleteDatabase(entry.name));
+    await requestToPromise(indexedDB.deleteDatabase(entry.name));
   }
 });
 
 describe('archive schema v1', () => {
   it('creates the canonical stores and indexes', async () => {
     const name = `llm-chat-history-schema-${crypto.randomUUID()}`;
-    const db = await openArchiveDb({ name, factory: fakeIndexedDB });
+    const db = await openArchiveDb({ name, factory: indexedDB });
 
     expect([...db.objectStoreNames]).toEqual([
       STORES.conversations,
@@ -109,7 +109,7 @@ describe('archive schema v1', () => {
     );
 
     db.close();
-    await requestToPromise(fakeIndexedDB.deleteDatabase(name));
+    await requestToPromise(indexedDB.deleteDatabase(name));
   });
 
   it('promotes a provisional chat without duplicating the archive', async () => {
