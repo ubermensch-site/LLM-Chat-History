@@ -1,5 +1,5 @@
-import { access, readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { access, readFile, readdir } from 'node:fs/promises';
+import { join, relative, resolve, sep } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
 const dist = resolve(root, 'dist');
@@ -15,12 +15,28 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function collectFiles(directory) {
+  const output = [];
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const absolute = join(directory, entry.name);
+    if (entry.isDirectory()) output.push(...(await collectFiles(absolute)));
+    else if (entry.isFile()) output.push(relative(dist, absolute).split(sep).join('/'));
+  }
+  return output.sort();
+}
+
 for (const file of requiredFiles) {
   await access(resolve(dist, file));
 }
 
-const manifest = JSON.parse(await readFile(resolve(dist, 'manifest.json'), 'utf8'));
+const [manifest, packageJson] = await Promise.all([
+  readFile(resolve(dist, 'manifest.json'), 'utf8').then(JSON.parse),
+  readFile(resolve(root, 'package.json'), 'utf8').then(JSON.parse)
+]);
 assert(manifest.manifest_version === 3, 'Expected Manifest V3');
+assert(manifest.version === packageJson.version, `Version mismatch: manifest=${manifest.version}, package=${packageJson.version}`);
+assert(/^0\.1\.\d+$/.test(manifest.version), `Expected v0.1.x release version, got ${manifest.version}`);
 assert(manifest.background?.service_worker === 'background.js', 'Unexpected background worker entry');
 assert(Array.isArray(manifest.permissions), 'Manifest permissions must be an array');
 assert(
@@ -65,6 +81,9 @@ for (const [, attributes = '', body = ''] of scriptTags) {
   assert(body.trim() === '', 'Inline JavaScript found in Library page');
 }
 
+const distFiles = await collectFiles(dist);
+assert(!distFiles.some((file) => file.endsWith('.map')), `Release build contains source maps: ${distFiles.filter((file) => file.endsWith('.map')).join(', ')}`);
+
 const builtScriptEntries = await Promise.all(
   ['background.js', 'content.js', 'library.js'].map(async (file) => ({
     file,
@@ -96,5 +115,5 @@ for (const { file, source } of builtScriptEntries) {
   }
 }
 
-console.log(`Verified installable extension bundle: ${requiredFiles.join(', ')}`);
-console.log('Verified v0.1 security invariants: minimal permissions, explicit CSP, no dynamic HTML/code sinks, no network APIs.');
+console.log(`Verified installable extension bundle v${manifest.version}: ${distFiles.join(', ')}`);
+console.log('Verified v0.1 security/release invariants: version match, no source maps, minimal permissions, explicit CSP, no dynamic HTML/code sinks, no network APIs.');
