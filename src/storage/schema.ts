@@ -76,6 +76,8 @@ export interface ArchiveMessage {
   plainText: string;
   markdown: string | null;
   partial: boolean;
+  /** Provider model label only when that label was visibly rendered in the provider UI. */
+  modelLabel?: string | null;
   contentHash: string;
   firstObservedAt: string;
   lastObservedAt: string;
