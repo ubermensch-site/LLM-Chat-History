@@ -229,6 +229,7 @@ async function liveQaStatusForRequest(
       conversationFound: false,
       messageCount: 0,
       eventCount: 0,
+      visibleActivityCount: 0,
       recordingState: null
     };
   }
@@ -242,6 +243,10 @@ async function liveQaStatusForRequest(
     conversationFound: true,
     messageCount: messages.length,
     eventCount: events.length,
+    visibleActivityCount: messages.reduce(
+      (total, archivedMessage) => total + (archivedMessage.visibleActivities?.length ?? 0),
+      0
+    ),
     recordingState: conversation.recordingState
   };
 }
