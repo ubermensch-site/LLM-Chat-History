@@ -11,6 +11,23 @@ The repository has extensive synthetic/unit/integration coverage, and explicit h
 
 Issue #3 remains the authoritative live-validation gate. v0.1 must not be called release-ready until that evidence is recorded.
 
+The current release candidate also adds capture of provider-visible reasoning summaries/work/status activity. That behavior must be exercised in an authenticated live response before release because ChatGPT can change the markup used for these transient surfaces independently of ordinary user/assistant messages.
+
+## Visible activity limitations
+
+v0.1 records extra response activity only when ChatGPT renders it in the page while recording is active. Examples include visible “Thinking” summaries, visible search/browse/tool/work steps and visible status text.
+
+Important boundaries:
+
+- hidden/private chain-of-thought is not available to the extension and is not inferred;
+- if ChatGPT performs work without rendering a corresponding activity line, there is nothing for the extension to record;
+- provider-specific visual widgets or animations with no readable rendered text may be omitted;
+- transient activity can disappear from ChatGPT after a response finishes, so the recorder keeps entries cumulatively once observed;
+- Pause/Stop applies to visible activity as well as message content: activity first observed while paused/stopped is suppressed and cannot later backfill;
+- selector/markup changes may temporarily reduce activity capture even while ordinary final-answer capture remains healthy.
+
+The Library and Markdown exports label this material as **visible activity** or **visible reasoning summary**, not as hidden chain-of-thought.
+
 ## Historical import limitations
 
 v0.1 now includes an explicit **Import history** action in the recorder for already-long ChatGPT conversations.
@@ -59,7 +76,7 @@ Deleting from the Library removes the browser archive copy only. It does not del
 
 ## Diagnostics/profiling limitations
 
-Diagnostics and performance reports intentionally omit content, which limits how much they can explain content-specific parsing defects. They are designed to identify adapter/storage/runtime health without exposing conversation text.
+Diagnostics and performance reports intentionally omit content, including visible activity text, which limits how much they can explain content-specific parsing defects. They are designed to identify adapter/storage/runtime health without exposing conversation text.
 
 ## Cloud/sync limitations
 
