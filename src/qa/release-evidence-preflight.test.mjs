@@ -109,20 +109,50 @@ async function run(directory) {
 }
 
 describe('release QA evidence preflight', () => {
-  it('accepts a complete ten-scenario structurally valid evidence bundle', async () => {
+  it('accepts a complete ten-scenario structurally valid evidence bundle and emits content-free approval metadata', async () => {
     const directory = await evidenceDir();
     const result = await run(directory);
     expect(result.stdout).toContain('Release QA preflight PASS: 10 scenarios, 10 report(s)');
+    expect(result.stdout).toContain('Approval manifest:');
+
     const summary = await readFile(resolve(directory, 'release-qa-preflight.md'), 'utf8');
     expect(summary).toContain('Scenario 10: PASS');
     expect(summary).toContain('9ec6054c7d68d91ef2dc6e22e0fa297d0788a445');
+
+    const approval = JSON.parse(await readFile(resolve(directory, 'release-approval.json'), 'utf8'));
+    expect(approval).toEqual({
+      schema: 'llm-chat-history/release-approval',
+      schemaVersion: 1,
+      candidate: {
+        commitSha: '9ec6054c7d68d91ef2dc6e22e0fa297d0788a445',
+        version: '0.1.0',
+        unpackedArtifact: 'llm-chat-history-unpacked-example',
+        unpackedArtifactSha256: 'a'.repeat(64),
+        packagedArtifactSha256: 'b'.repeat(64),
+        ciRunId: 35096505521
+      },
+      environment: {
+        browser: 'Chrome',
+        browserVersion: '152.0.0.0',
+        os: 'Test OS'
+      },
+      testedAt: '2026-09-16T12:00:00.000Z',
+      tester: 'QA Tester',
+      scenarioCount: 10,
+      reportsValidated: 10,
+      allScenariosPass: true
+    });
+    expect(JSON.stringify(approval)).not.toContain('prompt');
+    expect(JSON.stringify(approval)).not.toContain('answer');
+    expect(JSON.stringify(approval)).not.toContain('rawUrl');
   });
 
-  it('rejects a report with unexpected fields', async () => {
+  it('rejects a report with unexpected fields and does not emit approval metadata', async () => {
     const directory = await evidenceDir();
     const invalid = { ...report(), leakedPrompt: 'must never be accepted' };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(invalid), 'utf8');
     await expect(run(directory)).rejects.toMatchObject({ stderr: expect.stringContaining('unexpected field: leakedPrompt') });
+    await expect(readFile(resolve(directory, 'release-approval.json'), 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('rejects incomplete human scenario approval', async () => {
