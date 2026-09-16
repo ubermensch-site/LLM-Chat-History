@@ -126,7 +126,12 @@ describe('full-text Library search', () => {
   it('treats missing project assignment as searchable Unsorted metadata', () => {
     const results = searchLibraryRecords([unsorted], 'unsorted');
     expect(results).toHaveLength(1);
-    expect(results[0]).toMatchObject({ kind: 'conversation', field: 'project' });
+    expect(results[0]).toMatchObject({
+      kind: 'conversation',
+      field: 'project',
+      snippet: 'Unsorted',
+      conversationId: unsortedConversation.id
+    });
   });
 
   it('returns no results for a blank query', () => {
