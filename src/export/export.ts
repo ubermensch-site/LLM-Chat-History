@@ -1,5 +1,8 @@
 import type { ArchiveConversation, ArchiveEvent, ArchiveMessage } from '../storage/schema';
 
+export const ARCHIVE_EXPORT_SCHEMA = 'llm-chat-history/archive-export';
+export const ARCHIVE_EXPORT_SCHEMA_VERSION = 1;
+
 export interface ArchiveExportBundle {
   conversation: ArchiveConversation;
   messages: ArchiveMessage[];
@@ -94,8 +97,8 @@ export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
 export function renderJsonExport(bundle: ArchiveExportBundle): string {
   return `${JSON.stringify(
     {
-      schema: 'llm-chat-history/archive-export',
-      schemaVersion: 1,
+      schema: ARCHIVE_EXPORT_SCHEMA,
+      schemaVersion: ARCHIVE_EXPORT_SCHEMA_VERSION,
       exportedAt: bundle.exportedAt,
       conversation: bundle.conversation,
       messages: bundle.messages,
