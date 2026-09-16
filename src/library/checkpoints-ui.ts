@@ -6,6 +6,7 @@ import {
   type ArchiveCheckpoint
 } from '../storage/checkpoints';
 import { openArchiveDb } from '../storage/db';
+import { requestMirrorRefresh } from './mirror-refresh';
 
 function byId<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -70,6 +71,7 @@ async function editCheckpoint(checkpoint: ArchiveCheckpoint): Promise<void> {
   try {
     const db = await dbPromise;
     await updateCheckpoint(db, checkpoint.id, nextName, nextNote || null);
+    void requestMirrorRefresh(checkpoint.conversationId);
     setStatus(`Updated checkpoint “${nextName.trim()}”.`);
     scheduleRender();
   } catch (error) {
@@ -84,6 +86,7 @@ async function removeCheckpoint(checkpoint: ArchiveCheckpoint): Promise<void> {
   try {
     const db = await dbPromise;
     await deleteCheckpoint(db, checkpoint.id);
+    void requestMirrorRefresh(checkpoint.conversationId);
     setStatus(`Deleted checkpoint “${checkpoint.name}”.`);
     scheduleRender();
   } catch (error) {
@@ -178,6 +181,7 @@ addCheckpointButton.addEventListener('click', () => {
   void dbPromise
     .then((db) => createCheckpoint(db, conversationId, name, note || null))
     .then((checkpoint) => {
+      void requestMirrorRefresh(checkpoint.conversationId);
       setStatus(`Created checkpoint “${checkpoint.name}”.`);
       scheduleRender();
     })

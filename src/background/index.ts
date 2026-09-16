@@ -5,16 +5,40 @@ import type {
   CreateCheckpointMessage,
   OpenLibraryMessage,
   RecorderCommandMessage,
+  RefreshMirrorMessage,
   ShowRecorderMessage
 } from '../shared/types';
+import { openMirrorSettingsDb } from '../filesystem/connection';
+import { mirrorConversationLatest } from '../filesystem/service';
+import { MIRROR_RUNTIME_STATUS_KEY, type MirrorRuntimeStatus } from '../filesystem/status';
+import { CoalescingMirrorQueue } from '../filesystem/writer';
 import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
+import { provisionalConversationKey } from '../storage/ids';
 
+type PersistingRequest = Exclude<
+  ContentToBackgroundRequest,
+  OpenLibraryMessage | RefreshMirrorMessage
+>;
+
+let archiveDbPromise: Promise<IDBDatabase> | null = null;
 let repositoryPromise: Promise<ArchiveRepository> | null = null;
+let mirrorSettingsDbPromise: Promise<IDBDatabase> | null = null;
+const mirrorQueue = new CoalescingMirrorQueue();
+
+function getArchiveDb(): Promise<IDBDatabase> {
+  archiveDbPromise ??= openArchiveDb();
+  return archiveDbPromise;
+}
 
 function getRepository(): Promise<ArchiveRepository> {
-  repositoryPromise ??= openArchiveDb().then((db) => new ArchiveRepository(db));
+  repositoryPromise ??= getArchiveDb().then((db) => new ArchiveRepository(db));
   return repositoryPromise;
+}
+
+function getMirrorSettingsDb(): Promise<IDBDatabase> {
+  mirrorSettingsDbPromise ??= openMirrorSettingsDb();
+  return mirrorSettingsDbPromise;
 }
 
 function hasEnvelopeFields(value: unknown): value is {
@@ -78,12 +102,23 @@ function isOpenLibraryMessage(value: unknown): value is OpenLibraryMessage {
   );
 }
 
+function isRefreshMirrorMessage(value: unknown): value is RefreshMirrorMessage {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<RefreshMirrorMessage>;
+  return (
+    candidate.type === 'LLMCH_REFRESH_MIRROR' &&
+    typeof candidate.conversationId === 'string' &&
+    candidate.conversationId.length > 0
+  );
+}
+
 function isKnownRequest(value: unknown): value is ContentToBackgroundRequest {
   return (
     isProviderObservationMessage(value) ||
     isRecorderCommandMessage(value) ||
     isCreateCheckpointMessage(value) ||
-    isOpenLibraryMessage(value)
+    isOpenLibraryMessage(value) ||
+    isRefreshMirrorMessage(value)
   );
 }
 
@@ -98,6 +133,115 @@ async function showRecorder(tabId: number): Promise<boolean> {
     return Boolean(ack?.ok);
   } catch {
     return false;
+  }
+}
+
+function mirrorIdentity(message: PersistingRequest): {
+  providerId: 'chatgpt';
+  providerConversationId: string | null;
+  sourceSessionId: string;
+} | null {
+  if (message.type === 'LLMCH_PROVIDER_OBSERVATION') {
+    if (message.observation.type === 'health') return null;
+    if (message.observation.type === 'conversation') {
+      return {
+        providerId: message.providerId,
+        providerConversationId: message.observation.identity.providerConversationId,
+        sourceSessionId: message.sourceSessionId
+      };
+    }
+    return {
+      providerId: message.providerId,
+      providerConversationId: message.observation.turn.providerConversationId,
+      sourceSessionId: message.sourceSessionId
+    };
+  }
+
+  return {
+    providerId: message.providerId,
+    providerConversationId: message.identity.providerConversationId,
+    sourceSessionId: message.sourceSessionId
+  };
+}
+
+async function mirrorConversationIdForRequest(
+  repository: ArchiveRepository,
+  message: PersistingRequest
+): Promise<string | null> {
+  const identity = mirrorIdentity(message);
+  if (!identity) return null;
+  const conversations = await repository.listConversations();
+
+  if (identity.providerConversationId) {
+    return (
+      conversations.find(
+        (conversation) =>
+          conversation.providerId === identity.providerId &&
+          conversation.providerConversationId === identity.providerConversationId
+      )?.id ?? null
+    );
+  }
+
+  const provisionalKey = provisionalConversationKey(identity.providerId, identity.sourceSessionId);
+  return conversations.find((conversation) => conversation.provisionalKey === provisionalKey)?.id ?? null;
+}
+
+async function persistMirrorStatus(status: MirrorRuntimeStatus): Promise<void> {
+  await chrome.storage.local.set({ [MIRROR_RUNTIME_STATUS_KEY]: status });
+}
+
+async function reportMirrorError(
+  conversationId: string | null,
+  error: unknown
+): Promise<void> {
+  const status: MirrorRuntimeStatus = {
+    state: 'error',
+    folderName: null,
+    conversationId,
+    path: null,
+    detail: error instanceof Error ? error.message : String(error),
+    updatedAt: new Date().toISOString()
+  };
+  console.warn('[LLM Chat History] optional filesystem mirror failed', error);
+  try {
+    await persistMirrorStatus(status);
+  } catch (statusError) {
+    console.warn('[LLM Chat History] unable to persist mirror health', statusError);
+  }
+}
+
+async function mirrorConversationById(
+  repository: ArchiveRepository,
+  conversationId: string
+): Promise<void> {
+  try {
+    await mirrorQueue.enqueue(conversationId, async () => {
+      const [archiveDb, settingsDb] = await Promise.all([getArchiveDb(), getMirrorSettingsDb()]);
+      const status = await mirrorConversationLatest({
+        repository,
+        archiveDb,
+        settingsDb,
+        conversationId
+      });
+      await persistMirrorStatus(status);
+    });
+  } catch (error) {
+    await reportMirrorError(conversationId, error);
+  }
+}
+
+async function mirrorAfterCanonicalPersistence(
+  repository: ArchiveRepository,
+  message: PersistingRequest
+): Promise<void> {
+  try {
+    const conversationId = await mirrorConversationIdForRequest(repository, message);
+    if (!conversationId) return;
+    await mirrorConversationById(repository, conversationId);
+  } catch (error) {
+    // This entire path is optional. Even conversation lookup failures must never
+    // propagate into the canonical persistence ACK.
+    await reportMirrorError(null, error);
   }
 }
 
@@ -127,26 +271,44 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     return true;
   }
 
+  if (message.type === 'LLMCH_REFRESH_MIRROR') {
+    void getRepository()
+      .then((repository) => mirrorConversationById(repository, message.conversationId))
+      .then(() => sendResponse({ ok: true } satisfies BackgroundAck))
+      .catch((error: unknown) => {
+        const text = error instanceof Error ? error.message : String(error);
+        sendResponse({ ok: false, error: text } satisfies BackgroundAck);
+      });
+    return true;
+  }
+
   void getRepository()
     .then(async (repository) => {
+      let recordingState;
       if (message.type === 'LLMCH_RECORDER_COMMAND') {
-        return repository.applyRecorderCommand(message);
+        recordingState = await repository.applyRecorderCommand(message);
+      } else if (message.type === 'LLMCH_CREATE_CHECKPOINT') {
+        recordingState = await repository.createCheckpoint(message);
+      } else {
+        recordingState = await repository.persistObservation(message);
       }
-      if (message.type === 'LLMCH_CREATE_CHECKPOINT') {
-        return repository.createCheckpoint(message);
-      }
-      return repository.persistObservation(message);
+      return { repository, recordingState };
     })
-    .then(async (recordingState) => {
+    .then(async ({ repository, recordingState }) => {
       const persistedAt = new Date().toISOString();
       await chrome.storage.local.set({
         lastPersistenceAt: persistedAt,
         lastPersistenceError: null
       });
+
       const ack: BackgroundAck = recordingState
         ? { ok: true, recordingState, persistedAt }
         : { ok: true, persistedAt };
       sendResponse(ack);
+
+      // The canonical ACK is deliberately sent first. Optional filesystem work runs
+      // from the latest IndexedDB state and can coalesce subsequent recorder events.
+      void mirrorAfterCanonicalPersistence(repository, message);
     })
     .catch(async (error: unknown) => {
       const text = error instanceof Error ? error.message : String(error);
