@@ -158,6 +158,32 @@ export async function queryDirectoryHealth(
   }
 }
 
+export async function requestDirectoryPermission(
+  handle: FileSystemDirectoryHandle,
+  target: Window = window
+): Promise<MirrorConnectionHealth> {
+  if (!directoryPickerSupported(target)) {
+    return {
+      state: 'unsupported',
+      folderName: handle.name,
+      detail: 'This browser does not expose the required directory picker.'
+    };
+  }
+
+  try {
+    const permission = await (handle as PermissionCapableDirectoryHandle).requestPermission({
+      mode: 'readwrite'
+    });
+    return healthFromPermission(handle.name, permission);
+  } catch (error) {
+    return {
+      state: 'error',
+      folderName: handle.name,
+      detail: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
 export async function pickAndStoreDirectory(
   db: IDBDatabase,
   target: Window = window
@@ -186,24 +212,5 @@ export async function requestStoredDirectoryPermission(
 ): Promise<MirrorConnectionHealth> {
   const handle = await getStoredDirectoryHandle(db);
   if (!handle) return { state: 'disconnected', folderName: null, detail: null };
-  if (!directoryPickerSupported(target)) {
-    return {
-      state: 'unsupported',
-      folderName: handle.name,
-      detail: 'This browser does not expose the required directory picker.'
-    };
-  }
-
-  try {
-    const permission = await (handle as PermissionCapableDirectoryHandle).requestPermission({
-      mode: 'readwrite'
-    });
-    return healthFromPermission(handle.name, permission);
-  } catch (error) {
-    return {
-      state: 'error',
-      folderName: handle.name,
-      detail: error instanceof Error ? error.message : String(error)
-    };
-  }
+  return requestDirectoryPermission(handle, target);
 }
