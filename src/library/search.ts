@@ -4,7 +4,7 @@ import type { ArchiveConversation, ArchiveMessage, ArchiveProject } from '../sto
 export interface LibraryRecord {
   conversation: ArchiveConversation;
   messages: ArchiveMessage[];
-  project?: ArchiveProject;
+  project: ArchiveProject | undefined;
 }
 
 function normalized(value: string): string {
