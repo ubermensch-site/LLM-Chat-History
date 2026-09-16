@@ -19,9 +19,22 @@ import {
 
 const isoNow = () => new Date().toISOString();
 
+const TRANSIENT_ASSISTANT_STATUS_PATTERNS = [
+  /^Connection interrupted\.?\s+Waiting for the complete answer\.?$/i
+] as const;
+
 export function parseChatGptConversationId(url: URL): string | null {
   const match = url.pathname.match(/\/c\/([^/?#]+)/);
   return match?.[1] ?? null;
+}
+
+export function isTransientAssistantStatusText(text: string): boolean {
+  const normalized = text.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  return TRANSIENT_ASSISTANT_STATUS_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+export function shouldArchiveChatGptTurn(role: TurnRole, plainText: string): boolean {
+  return role !== 'assistant' || !isTransientAssistantStatusText(plainText);
 }
 
 function queryFirst(root: ParentNode, selectors: readonly string[]): Element | null {
@@ -145,10 +158,20 @@ export class ChatGptAdapter implements ProviderAdapter {
 
     const elements = collectTurnElements();
     const generating = hasGenerationControl();
+    const skippedAssistantIndices = new Set<number>();
     let lastAssistantIndex = -1;
 
     elements.forEach((element, index) => {
-      if (roleFor(element) === 'assistant') lastAssistantIndex = index;
+      const role = roleFor(element);
+      if (role !== 'assistant') return;
+
+      const plainText = normalizedText(contentNodeFor(element, role));
+      if (!shouldArchiveChatGptTurn(role, plainText)) {
+        skippedAssistantIndices.add(index);
+        return;
+      }
+
+      lastAssistantIndex = index;
     });
 
     const turns: ProviderTurnObservation[] = [];
@@ -156,6 +179,7 @@ export class ChatGptAdapter implements ProviderAdapter {
     elements.forEach((element, index) => {
       const role = roleFor(element);
       if (!role) return;
+      if (role === 'assistant' && skippedAssistantIndices.has(index)) return;
 
       const messageNode = messageNodeFor(element, role);
       const providerMessageId = messageNode?.getAttribute('data-message-id') ?? null;
