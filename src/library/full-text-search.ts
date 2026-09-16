@@ -53,6 +53,14 @@ function snippet(value: string, query: string, radius = 72): string {
   return `${start > 0 ? '…' : ''}${compact.slice(start, end)}${end < compact.length ? '…' : ''}`;
 }
 
+function messageSearchText(message: ArchiveMessage): string {
+  return [
+    message.plainText,
+    message.modelLabel ?? '',
+    ...(message.visibleActivities?.map((activity) => activity.text) ?? [])
+  ].join('\n');
+}
+
 function metadataResult(record: LibraryRecord, query: string): LibrarySearchResult | null {
   const tokens = queryTokens(query);
   if (!tokens.length) return null;
@@ -112,7 +120,8 @@ function messageResult(
   query: string
 ): LibrarySearchResult | null {
   const tokens = queryTokens(query);
-  if (!tokens.length || !containsEveryToken(message.plainText, tokens)) return null;
+  const text = messageSearchText(message);
+  if (!tokens.length || !containsEveryToken(text, tokens)) return null;
   return {
     kind: 'message',
     conversationId: record.conversation.id,
@@ -120,7 +129,7 @@ function messageResult(
     field: 'message',
     score: 50,
     title: conversationDisplayTitle(record.conversation),
-    snippet: snippet(message.plainText, query),
+    snippet: snippet(text, query),
     updatedAt: record.conversation.updatedAt,
     orderHint: message.orderHint
   };
