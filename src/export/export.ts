@@ -127,6 +127,9 @@ export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
     const message = item.message;
     const content = (message.markdown || message.plainText).trim();
     lines.push(`## ${roleLabel(message.role)}`, '');
+    if (message.role === 'assistant' && message.modelLabel) {
+      lines.push(`> **Model shown by provider:** ${escapeMetadata(message.modelLabel)}`, '');
+    }
     if (message.partial) lines.push('> **Partial capture**', '');
     lines.push(content || '_Empty rendered message_', '', '---', '');
   }
