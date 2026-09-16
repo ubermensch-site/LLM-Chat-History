@@ -1,6 +1,8 @@
 export type ProviderId = 'chatgpt';
 export type TurnRole = 'user' | 'assistant';
 export type AdapterHealthState = 'healthy' | 'degraded' | 'error';
+export type RecorderState = 'recording' | 'paused' | 'stopped' | 'error';
+export type RecorderCommand = 'pause' | 'resume' | 'stop' | 'start';
 
 export interface ProviderConversationIdentity {
   providerId: ProviderId;
@@ -63,7 +65,20 @@ export interface ContentToBackgroundMessage {
   observation: ProviderObservation;
 }
 
+export interface RecorderCommandMessage {
+  type: 'LLMCH_RECORDER_COMMAND';
+  providerId: ProviderId;
+  sourceSessionId: string;
+  pageUrl: string;
+  identity: ProviderConversationIdentity;
+  command: RecorderCommand;
+  observedAt: string;
+}
+
+export type ContentToBackgroundRequest = ContentToBackgroundMessage | RecorderCommandMessage;
+
 export interface BackgroundAck {
   ok: boolean;
   error?: string;
+  recordingState?: RecorderState;
 }

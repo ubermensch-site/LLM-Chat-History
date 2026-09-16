@@ -1,4 +1,4 @@
-import type { ProviderId, TurnRole } from '../shared/types';
+import type { ProviderId, RecorderState, TurnRole } from '../shared/types';
 
 export const ARCHIVE_DB_NAME = 'llm-chat-history';
 export const ARCHIVE_DB_VERSION = 1;
@@ -39,6 +39,8 @@ export interface ArchiveConversation {
   updatedAt: string;
   lastObservedAt: string;
   messageCount: number;
+  recordingState: RecorderState;
+  recordingStateUpdatedAt: string;
 }
 
 export interface ArchiveMessage {
@@ -65,6 +67,11 @@ export type ArchiveEventType =
   | 'message-added'
   | 'message-updated'
   | 'message-finalized'
+  | 'recording-started'
+  | 'recording-paused'
+  | 'recording-resumed'
+  | 'recording-stopped'
+  | 'turn-suppressed'
   | 'adapter-health';
 
 export interface ArchiveEvent {
