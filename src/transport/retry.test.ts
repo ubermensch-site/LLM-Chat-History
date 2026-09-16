@@ -5,7 +5,7 @@ describe('withRetry', () => {
   it('retries transient failures and returns the eventual result', async () => {
     const sleep = vi.fn(async () => undefined);
     const operation = vi
-      .fn<[(attempt: number)], Promise<string>>()
+      .fn<(attempt: number) => Promise<string>>()
       .mockRejectedValueOnce(new Error('worker asleep'))
       .mockResolvedValue('ok');
 
