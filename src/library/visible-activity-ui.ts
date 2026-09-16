@@ -2,6 +2,68 @@ import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
 import type { ArchiveVisibleActivity } from '../storage/schema';
 
+const style = document.createElement('style');
+style.textContent = `
+  .visible-activity {
+    margin-top: 10px;
+    border: 1px solid var(--outline-variant);
+    border-radius: 14px;
+    background: var(--surface-container);
+    overflow: hidden;
+  }
+  .visible-activity > summary {
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--on-surface);
+  }
+  .visible-activity > summary:focus-visible {
+    outline: 3px solid color-mix(in srgb, var(--primary) 45%, transparent);
+    outline-offset: -3px;
+  }
+  .visible-activity-help {
+    margin: 0;
+    padding: 0 12px 10px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: var(--on-surface-variant);
+  }
+  .visible-activity-body {
+    display: grid;
+    gap: 8px;
+    padding: 0 10px 10px;
+  }
+  .visible-activity-row {
+    padding: 10px;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--outline-variant);
+  }
+  .visible-activity-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 11px;
+    color: var(--primary);
+  }
+  .visible-activity-heading time {
+    flex: 0 0 auto;
+    font-size: 10px;
+    color: var(--on-surface-variant);
+  }
+  .visible-activity-text {
+    margin-top: 6px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--on-surface);
+  }
+`;
+document.head.append(style);
+
 function humanDate(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
