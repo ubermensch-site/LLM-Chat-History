@@ -3,6 +3,8 @@ import type {
   ContentToBackgroundMessage,
   ContentToBackgroundRequest,
   CreateCheckpointMessage,
+  LiveQaArchiveStatus,
+  LiveQaStatusMessage,
   OpenLibraryMessage,
   RecorderCommandMessage,
   RefreshMirrorMessage,
@@ -18,7 +20,7 @@ import { provisionalConversationKey } from '../storage/ids';
 
 type PersistingRequest = Exclude<
   ContentToBackgroundRequest,
-  OpenLibraryMessage | RefreshMirrorMessage
+  OpenLibraryMessage | RefreshMirrorMessage | LiveQaStatusMessage
 >;
 
 let archiveDbPromise: Promise<IDBDatabase> | null = null;
@@ -112,13 +114,23 @@ function isRefreshMirrorMessage(value: unknown): value is RefreshMirrorMessage {
   );
 }
 
+function isLiveQaStatusMessage(value: unknown): value is LiveQaStatusMessage {
+  if (!hasEnvelopeFields(value)) return false;
+  const candidate = value as Partial<LiveQaStatusMessage>;
+  return (
+    candidate.type === 'LLMCH_LIVE_QA_STATUS' &&
+    Boolean(candidate.identity && typeof candidate.identity === 'object')
+  );
+}
+
 function isKnownRequest(value: unknown): value is ContentToBackgroundRequest {
   return (
     isProviderObservationMessage(value) ||
     isRecorderCommandMessage(value) ||
     isCreateCheckpointMessage(value) ||
     isOpenLibraryMessage(value) ||
-    isRefreshMirrorMessage(value)
+    isRefreshMirrorMessage(value) ||
+    isLiveQaStatusMessage(value)
   );
 }
 
@@ -193,6 +205,45 @@ async function mirrorConversationIdForRequest(
 
   const provisionalKey = provisionalConversationKey(identity.providerId, identity.sourceSessionId);
   return conversations.find((conversation) => conversation.provisionalKey === provisionalKey)?.id ?? null;
+}
+
+async function liveQaStatusForRequest(
+  repository: ArchiveRepository,
+  message: LiveQaStatusMessage
+): Promise<LiveQaArchiveStatus> {
+  const conversations = await repository.listConversations();
+  const providerConversationId = message.identity.providerConversationId;
+  const conversation = providerConversationId
+    ? conversations.find(
+        (candidate) =>
+          candidate.providerId === message.providerId &&
+          candidate.providerConversationId === providerConversationId
+      )
+    : conversations.find(
+        (candidate) =>
+          candidate.provisionalKey === provisionalConversationKey(message.providerId, message.sourceSessionId)
+      );
+
+  if (!conversation) {
+    return {
+      conversationFound: false,
+      messageCount: 0,
+      eventCount: 0,
+      recordingState: null
+    };
+  }
+
+  const [messages, events] = await Promise.all([
+    repository.listMessages(conversation.id),
+    repository.listEvents(conversation.id)
+  ]);
+
+  return {
+    conversationFound: true,
+    messageCount: messages.length,
+    eventCount: events.length,
+    recordingState: conversation.recordingState
+  };
 }
 
 async function persistMirrorStatus(status: MirrorRuntimeStatus): Promise<void> {
@@ -284,6 +335,17 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     void getRepository()
       .then((repository) => mirrorConversationById(repository, message.conversationId))
       .then(() => sendResponse({ ok: true } satisfies BackgroundAck))
+      .catch((error: unknown) => {
+        const text = error instanceof Error ? error.message : String(error);
+        sendResponse({ ok: false, error: text } satisfies BackgroundAck);
+      });
+    return true;
+  }
+
+  if (message.type === 'LLMCH_LIVE_QA_STATUS') {
+    void getRepository()
+      .then((repository) => liveQaStatusForRequest(repository, message))
+      .then((liveQaStatus) => sendResponse({ ok: true, liveQaStatus } satisfies BackgroundAck))
       .catch((error: unknown) => {
         const text = error instanceof Error ? error.message : String(error);
         sendResponse({ ok: false, error: text } satisfies BackgroundAck);
