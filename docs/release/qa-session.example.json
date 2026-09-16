@@ -1,0 +1,31 @@
+{
+  "schema": "llm-chat-history/release-qa-session",
+  "schemaVersion": 1,
+  "candidate": {
+    "commitSha": "9ec6054c7d68d91ef2dc6e22e0fa297d0788a445",
+    "version": "0.1.0",
+    "unpackedArtifact": "llm-chat-history-unpacked-9ec6054c7d68d91ef2dc6e22e0fa297d0788a445",
+    "unpackedArtifactSha256": "048728909a99c4c08f35387117eefbe1733f847f5ab9c5efe5660f7ad13900bb",
+    "packagedArtifactSha256": "2f3ebcb4c1242e78e8c13faa478055b2d8300c946d0808fe601cfbbd93a9fa57",
+    "ciRunId": 35096505521
+  },
+  "environment": {
+    "browser": "Chrome",
+    "browserVersion": "REPLACE_ME",
+    "os": "REPLACE_ME"
+  },
+  "testedAt": "REPLACE_WITH_ISO_8601_TIMESTAMP",
+  "tester": "REPLACE_ME",
+  "scenarios": [
+    { "id": 1, "status": "BLOCKED", "reports": ["scenario-01.json"], "notes": "Existing conversation baseline" },
+    { "id": 2, "status": "BLOCKED", "reports": ["scenario-02-before.json", "scenario-02-after.json"], "notes": "New chat provisional to stable identity" },
+    { "id": 3, "status": "BLOCKED", "reports": ["scenario-03-streaming.json", "scenario-03-final.json"], "notes": "Streaming response finalization" },
+    { "id": 4, "status": "BLOCKED", "reports": ["scenario-04-a.json", "scenario-04-b.json", "scenario-04-a-return.json"], "notes": "SPA navigation isolation" },
+    { "id": 5, "status": "BLOCKED", "reports": ["scenario-05-before.json", "scenario-05-paused.json", "scenario-05-after.json"], "notes": "Pause/private/resume" },
+    { "id": 6, "status": "BLOCKED", "reports": ["scenario-06-stopped.json", "scenario-06-restarted.json"], "notes": "Stop/start persistence" },
+    { "id": 7, "status": "BLOCKED", "reports": ["scenario-07-minimized.json", "scenario-07-hidden.json", "scenario-07-restored.json"], "notes": "Minimize/hide semantics" },
+    { "id": 8, "status": "BLOCKED", "reports": ["scenario-08-before.json", "scenario-08-after-refresh.json"], "notes": "Refresh and MV3 recovery" },
+    { "id": 9, "status": "BLOCKED", "reports": ["scenario-09-before.json", "scenario-09-after-import.json", "scenario-09-after-rerun.json"], "notes": "Long-thread historical import" },
+    { "id": 10, "status": "BLOCKED", "reports": ["scenario-10.json"], "notes": "Library/search/export smoke test" }
+  ]
+}
