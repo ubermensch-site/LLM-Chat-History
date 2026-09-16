@@ -21,7 +21,9 @@ const buildOptions = {
   outdir: 'dist',
   format: 'iife',
   target: ['chrome120'],
-  sourcemap: true,
+  // Keep source mapping useful during local development without shipping source maps
+  // in release/CI production artifacts.
+  sourcemap: watch ? 'inline' : false,
   logLevel: 'info'
 };
 
