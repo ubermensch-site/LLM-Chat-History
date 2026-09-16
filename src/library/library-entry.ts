@@ -4,3 +4,4 @@ import './checkpoints-ui';
 import './filesystem-connection-ui';
 import './diagnostics-ui';
 import './performance-ui';
+import './privacy-notices';
