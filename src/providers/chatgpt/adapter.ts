@@ -4,6 +4,7 @@ import type {
   ProviderConversationIdentity,
   ProviderObservation,
   ProviderTurnObservation,
+  ProviderVisibleActivityObservation,
   TurnRole
 } from '../../shared/types';
 import { renderDomAsMarkdown } from './dom-markdown';
@@ -16,6 +17,13 @@ import {
   TURN_SHELL_SELECTORS,
   USER_CONTENT_SELECTORS
 } from './selectors';
+import {
+  classifyVisibleActivity,
+  hasExplicitVisibleActivitySignal,
+  looksLikeVisibleActivityText,
+  normalizeVisibleActivityText,
+  visibleActivityId
+} from './visible-activity';
 
 const isoNow = () => new Date().toISOString();
 const VISIBLE_GPT_MODEL = /^GPT[-\s]?\d[A-Za-z0-9.]*(?:\s+[A-Za-z0-9.+-]+){0,3}$/i;
@@ -84,24 +92,29 @@ function messageNodeFor(element: Element, role: TurnRole): Element | null {
   return element.querySelector(`[data-message-author-role="${role}"]`);
 }
 
+function assistantAnswerNodeFor(element: Element): Element | null {
+  const roleNode = messageNodeFor(element, 'assistant') ?? element;
+  return queryFirst(roleNode, ASSISTANT_CONTENT_SELECTORS);
+}
+
 function contentNodeFor(element: Element, role: TurnRole): Element | null {
   const roleNode = messageNodeFor(element, role) ?? element;
-  const selectors = role === 'assistant' ? ASSISTANT_CONTENT_SELECTORS : USER_CONTENT_SELECTORS;
-  return queryFirst(roleNode, selectors) ?? roleNode;
+  if (role === 'assistant') return assistantAnswerNodeFor(element) ?? roleNode;
+  return queryFirst(roleNode, USER_CONTENT_SELECTORS) ?? roleNode;
 }
 
 function normalizedText(element: Element | null): string {
   return (element?.textContent ?? '').replace(/\u00a0/g, ' ').trim();
 }
 
-function visibleModelLabelFor(turn: Element, contentNode: Element | null): string | null {
+function visibleModelLabelFor(turn: Element, answerNode: Element | null): string | null {
   const candidates = turn.querySelectorAll(
     'button, [role="button"], [data-testid*="model" i], [aria-label*="model" i]'
   );
 
   for (const candidate of candidates) {
     if (candidate.getAttribute('aria-hidden') === 'true') continue;
-    if (contentNode && (candidate === contentNode || contentNode.contains(candidate))) continue;
+    if (answerNode && (candidate === answerNode || answerNode.contains(candidate))) continue;
 
     const fromText = normalizeVisibleModelLabel(candidate.textContent ?? '');
     if (fromText) return fromText;
@@ -111,6 +124,68 @@ function visibleModelLabelFor(turn: Element, contentNode: Element | null): strin
   }
 
   return null;
+}
+
+function candidateSignal(element: Element): string {
+  return [
+    element.tagName,
+    element.getAttribute('role') ?? '',
+    element.getAttribute('data-testid') ?? '',
+    element.getAttribute('aria-label') ?? '',
+    element.getAttribute('aria-live') ?? ''
+  ].join(' ');
+}
+
+function candidateDomKey(element: Element, fallbackIndex: number): string {
+  const attributes = ['data-testid', 'id', 'aria-controls', 'aria-label'] as const;
+  for (const attribute of attributes) {
+    const value = element.getAttribute(attribute);
+    if (value) return `${attribute}:${value}`;
+  }
+  return `${element.tagName.toLocaleLowerCase()}:${fallbackIndex}`;
+}
+
+function visibleActivitiesFor(
+  turn: Element,
+  answerNode: Element | null,
+  providerTurnId: string,
+  observedAt: string
+): ProviderVisibleActivityObservation[] {
+  const candidates = turn.querySelectorAll(
+    'button, [role="button"], summary, [role="status"], [aria-live], [data-testid], [aria-label], div, span'
+  );
+  const seenText = new Set<string>();
+  const activities: ProviderVisibleActivityObservation[] = [];
+
+  candidates.forEach((candidate, candidateIndex) => {
+    if (candidate.getAttribute('aria-hidden') === 'true') return;
+    if (answerNode && (candidate === answerNode || answerNode.contains(candidate))) return;
+
+    const text = normalizeVisibleActivityText(candidate.textContent ?? '');
+    if (!text || normalizeVisibleModelLabel(text)) return;
+
+    const signal = candidateSignal(candidate);
+    if (!hasExplicitVisibleActivitySignal(signal) && !looksLikeVisibleActivityText(text)) return;
+
+    const normalizedKey = text.toLocaleLowerCase();
+    if (seenText.has(normalizedKey)) return;
+    seenText.add(normalizedKey);
+
+    const orderHint = activities.length;
+    activities.push({
+      providerActivityId: visibleActivityId(
+        providerTurnId,
+        candidateDomKey(candidate, candidateIndex),
+        orderHint
+      ),
+      kind: classifyVisibleActivity(text, signal),
+      text,
+      orderHint,
+      observedAt
+    });
+  });
+
+  return activities;
 }
 
 function hasGenerationControl(): boolean {
@@ -199,9 +274,15 @@ export class ChatGptAdapter implements ProviderAdapter {
         providerMessageId ??
         element.getAttribute('data-testid') ??
         `dom:${role}:${index}`;
+      const observedAt = isoNow();
       const contentNode = contentNodeFor(element, role);
+      const answerNode = role === 'assistant' ? assistantAnswerNodeFor(element) : null;
       const plainText = normalizedText(contentNode);
       const renderedMarkdown = contentNode ? renderDomAsMarkdown(contentNode) : '';
+      const visibleActivities =
+        role === 'assistant'
+          ? visibleActivitiesFor(element, answerNode, providerTurnId, observedAt)
+          : [];
 
       turns.push({
         providerId: this.providerId,
@@ -213,8 +294,9 @@ export class ChatGptAdapter implements ProviderAdapter {
         plainText,
         markdown: renderedMarkdown || plainText || null,
         partial: role === 'assistant' && generating && index === lastAssistantIndex,
-        modelLabel: role === 'assistant' ? visibleModelLabelFor(element, contentNode) : null,
-        observedAt: isoNow()
+        modelLabel: role === 'assistant' ? visibleModelLabelFor(element, answerNode) : null,
+        ...(visibleActivities.length ? { visibleActivities } : {}),
+        observedAt
       });
     });
 
