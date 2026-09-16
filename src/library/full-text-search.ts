@@ -40,13 +40,33 @@ function snippet(value: string, query: string, radius = 72): string {
   if (!compact) return '';
   const normalizedValue = compact.toLocaleLowerCase();
   const tokens = queryTokens(query);
-  const firstIndex = tokens
-    .map((token) => normalizedValue.indexOf(token))
-    .filter((index) => index >= 0)
-    .sort((a, b) => a - b)[0] ?? 0;
+  const firstIndex =
+    tokens
+      .map((token) => normalizedValue.indexOf(token))
+      .filter((index) => index >= 0)
+      .sort((a, b) => a - b)[0] ?? 0;
   const start = Math.max(0, firstIndex - radius);
   const end = Math.min(compact.length, firstIndex + radius);
   return `${start > 0 ? '…' : ''}${compact.slice(start, end)}${end < compact.length ? '…' : ''}`;
+}
+
+function conversationResult(
+  record: LibraryRecord,
+  field: Exclude<LibrarySearchField, 'message'>,
+  score: number,
+  matchedValue: string
+): LibrarySearchResult {
+  const conversation = record.conversation;
+  return {
+    kind: 'conversation',
+    conversationId: conversation.id,
+    field,
+    score,
+    title: conversationDisplayTitle(conversation),
+    snippet: matchedValue,
+    updatedAt: conversation.updatedAt,
+    orderHint: -1
+  };
 }
 
 function metadataResult(record: LibraryRecord, query: string): LibrarySearchResult | null {
@@ -57,28 +77,34 @@ function metadataResult(record: LibraryRecord, query: string): LibrarySearchResu
   const project = record.project;
   const folder = project?.folders.find((entry) => entry.id === conversation.folderId);
   const title = conversationDisplayTitle(conversation);
-  const candidates: Array<{ field: LibrarySearchField; value: string; score: number }> = [
-    { field: 'title', value: title, score: 100 },
-    { field: 'provider', value: conversation.providerId, score: 90 },
-    { field: 'provider', value: conversation.providerConversationId ?? '', score: 88 },
-    { field: 'project', value: project?.name ?? 'Unsorted', score: 80 },
-    { field: 'folder', value: folder?.name ?? '', score: 75 },
-    ...(conversation.tags ?? []).map((tag) => ({ field: 'tag' as const, value: tag, score: 70 }))
-  ];
 
-  const match = candidates.find((candidate) => containsEveryToken(candidate.value, tokens));
-  if (!match) return null;
+  if (containsEveryToken(title, tokens)) {
+    return conversationResult(record, 'title', 100, title);
+  }
+  if (containsEveryToken(conversation.providerId, tokens)) {
+    return conversationResult(record, 'provider', 90, conversation.providerId);
+  }
+  if (
+    conversation.providerConversationId &&
+    containsEveryToken(conversation.providerConversationId, tokens)
+  ) {
+    return conversationResult(record, 'provider', 88, conversation.providerConversationId);
+  }
 
-  return {
-    kind: 'conversation',
-    conversationId: conversation.id,
-    field: match.field,
-    score: match.score,
-    title,
-    snippet: match.value,
-    updatedAt: conversation.updatedAt,
-    orderHint: -1
-  };
+  const projectLabel = project?.name ?? 'Unsorted';
+  if (containsEveryToken(projectLabel, tokens)) {
+    return conversationResult(record, 'project', 80, projectLabel);
+  }
+  if (folder && containsEveryToken(folder.name, tokens)) {
+    return conversationResult(record, 'folder', 75, folder.name);
+  }
+  for (const tag of conversation.tags ?? []) {
+    if (containsEveryToken(tag, tokens)) {
+      return conversationResult(record, 'tag', 70, tag);
+    }
+  }
+
+  return null;
 }
 
 function messageResult(
