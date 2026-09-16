@@ -43,6 +43,11 @@ export type ProviderObservation =
       turn: ProviderTurnObservation;
     }
   | {
+      type: 'turn-snapshot';
+      turns: ProviderTurnObservation[];
+      observedAt: string;
+    }
+  | {
       type: 'health';
       health: AdapterHealth;
     };

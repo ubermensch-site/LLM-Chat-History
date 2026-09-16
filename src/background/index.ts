@@ -150,6 +150,15 @@ function mirrorIdentity(message: PersistingRequest): {
         sourceSessionId: message.sourceSessionId
       };
     }
+    if (message.observation.type === 'turn-snapshot') {
+      const first = message.observation.turns[0];
+      if (!first) return null;
+      return {
+        providerId: message.providerId,
+        providerConversationId: first.providerConversationId,
+        sourceSessionId: message.sourceSessionId
+      };
+    }
     return {
       providerId: message.providerId,
       providerConversationId: message.observation.turn.providerConversationId,

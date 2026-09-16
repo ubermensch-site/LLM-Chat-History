@@ -122,6 +122,9 @@ function enqueueObservation(observation: ProviderObservation): void {
   if (observation.type === 'turn-upsert') {
     renderedTurnIds.add(observation.turn.providerTurnId);
     pill.update({ turnCount: renderedTurnIds.size });
+  } else if (observation.type === 'turn-snapshot') {
+    for (const turn of observation.turns) renderedTurnIds.add(turn.providerTurnId);
+    pill.update({ turnCount: renderedTurnIds.size });
   } else if (observation.type === 'health') {
     pill.update({ health: observation.health.state });
   } else if (observation.type === 'conversation') {
