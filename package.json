@@ -10,7 +10,8 @@
     "dev": "node scripts/build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify:dist": "node scripts/verify-dist.mjs"
   },
   "devDependencies": {
     "@types/chrome": "0.3.0",
