@@ -80,13 +80,20 @@ export interface OpenLibraryMessage {
   type: 'LLMCH_OPEN_LIBRARY';
 }
 
+export interface ShowRecorderMessage {
+  type: 'LLMCH_SHOW_RECORDER';
+}
+
 export type ContentToBackgroundRequest =
   | ContentToBackgroundMessage
   | RecorderCommandMessage
   | OpenLibraryMessage;
 
+export type BackgroundToContentMessage = ShowRecorderMessage;
+
 export interface BackgroundAck {
   ok: boolean;
   error?: string;
   recordingState?: RecorderState;
+  persistedAt?: string;
 }
