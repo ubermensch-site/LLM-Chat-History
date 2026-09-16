@@ -117,8 +117,8 @@ describe('JSON archive import validation', () => {
     const duplicate = mutateExport((value) => {
       const messages = value.messages as Array<Record<string, unknown>>;
       const copy = { ...messages[0] };
-      copy.id = messages[1]!.id;
-      copy.providerTurnId = messages[1]!.providerTurnId;
+      copy.id = messages[0]!.id;
+      copy.providerTurnId = messages[0]!.providerTurnId;
       messages[1] = copy;
     });
     expect(() => parseJsonArchiveExport(duplicate)).toThrow(/duplicate identifiers/);
