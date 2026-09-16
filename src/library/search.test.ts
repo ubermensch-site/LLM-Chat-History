@@ -35,7 +35,29 @@ const message: ArchiveMessage = {
   updatedAt: '2026-09-16T10:01:00.000Z'
 };
 
+const activityMessage: ArchiveMessage = {
+  ...message,
+  id: 'm2',
+  providerTurnId: 'a1',
+  providerMessageId: 'a1',
+  role: 'assistant',
+  orderHint: 1,
+  plainText: 'Final result',
+  modelLabel: 'GPT-5.6 Sol',
+  visibleActivities: [
+    {
+      providerActivityId: 'a1:visible:0:a',
+      kind: 'tool',
+      text: 'Fetched release branch and checked workflow status',
+      orderHint: 0,
+      firstObservedAt: '2026-09-16T10:02:00.000Z',
+      lastObservedAt: '2026-09-16T10:02:01.000Z'
+    }
+  ]
+};
+
 const record = { conversation, messages: [message], project: undefined };
+const activityRecord = { conversation, messages: [activityMessage], project: undefined };
 
 const project: ArchiveProject = {
   id: 'project:storefront',
@@ -65,6 +87,11 @@ describe('library search', () => {
   it('matches captured message text', () => {
     expect(matchesLibraryQuery(record, 'non-zero price')).toBe(true);
     expect(matchesLibraryQuery(record, 'missing phrase')).toBe(false);
+  });
+
+  it('matches visible model and work activity text', () => {
+    expect(matchesLibraryQuery(activityRecord, 'workflow status')).toBe(true);
+    expect(matchesLibraryQuery(activityRecord, 'GPT-5.6 Sol')).toBe(true);
   });
 
   it('matches project, folder and tag organization metadata', () => {
