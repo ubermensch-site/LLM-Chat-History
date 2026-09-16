@@ -15,7 +15,7 @@ const buildOptions = {
   entryPoints: {
     content: 'src/content/index.ts',
     background: 'src/background/index.ts',
-    library: 'src/library/index.ts'
+    library: 'src/library/library-entry.ts'
   },
   bundle: true,
   outdir: 'dist',
