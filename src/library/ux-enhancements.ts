@@ -170,6 +170,9 @@ async function annotateVisibleModels(): Promise<void> {
     cards.forEach((card, index) => {
       const message = messages[index];
       if (!message || message.role !== 'assistant') return;
+      const nextText = message.modelLabel
+        ? `Model shown by ChatGPT: ${message.modelLabel}`
+        : 'Model: ChatGPT did not show a model name for this response.';
       let label = card.querySelector<HTMLElement>('.model-label');
       if (!label) {
         label = document.createElement('div');
@@ -177,9 +180,7 @@ async function annotateVisibleModels(): Promise<void> {
         const content = card.querySelector('.content');
         card.insertBefore(label, content ?? null);
       }
-      label.textContent = message.modelLabel
-        ? `Model shown by ChatGPT: ${message.modelLabel}`
-        : 'Model: ChatGPT did not show a model name for this response.';
+      if (label.textContent !== nextText) label.textContent = nextText;
     });
   } catch (error) {
     console.debug('[LLM Chat History] visible model labels unavailable', error);
