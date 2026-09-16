@@ -57,7 +57,12 @@ describe('Library management metadata', () => {
   it('uses the custom title for display, search and human-readable export names', () => {
     const bundle = managedBundle();
     expect(conversationDisplayTitle(bundle.conversation)).toBe('My research notes');
-    expect(matchesLibraryQuery({ conversation: bundle.conversation, messages: bundle.messages }, 'research notes')).toBe(true);
+    expect(
+      matchesLibraryQuery(
+        { conversation: bundle.conversation, messages: bundle.messages, project: undefined },
+        'research notes'
+      )
+    ).toBe(true);
     expect(renderMarkdownExport(bundle)).toContain('# My research notes');
     expect(exportFilename(bundle.conversation, 'md')).toContain('my-research-notes.md');
   });
