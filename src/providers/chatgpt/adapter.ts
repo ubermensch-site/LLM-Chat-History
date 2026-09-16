@@ -6,6 +6,7 @@ import type {
   ProviderTurnObservation,
   TurnRole
 } from '../../shared/types';
+import { ChatGptHealthMonitor } from './health-monitor';
 import {
   ASSISTANT_CONTENT_SELECTORS,
   CHATGPT_HOSTS,
@@ -82,6 +83,7 @@ function hasGenerationControl(): boolean {
 
 export class ChatGptAdapter implements ProviderAdapter {
   readonly providerId = 'chatgpt' as const;
+  private readonly healthMonitor = new ChatGptHealthMonitor();
 
   matchesLocation(url: URL): boolean {
     return url.protocol === 'https:' && CHATGPT_HOSTS.has(url.hostname);
@@ -155,39 +157,44 @@ export class ChatGptAdapter implements ProviderAdapter {
   getHealth(): AdapterHealth {
     const identity = this.getConversationIdentity();
     if (!identity) {
+      this.healthMonitor.reset();
       return { state: 'error', code: 'unsupported-location', observedAt: isoNow() };
     }
 
     const turns = collectTurnElements();
+    let base: AdapterHealth;
     if (identity.providerConversationId && turns.length === 0) {
-      return {
+      base = {
         state: 'degraded',
         code: 'conversation-has-no-rendered-turns',
         detail: 'Conversation route detected but no semantic turn elements are currently rendered.',
         observedAt: isoNow()
       };
+    } else {
+      const missingStableIds = turns.some((element, index) => {
+        const role = roleFor(element);
+        if (!role) return false;
+        const messageNode = messageNodeFor(element, role);
+        return !element.getAttribute('data-turn-id') &&
+          !messageNode?.getAttribute('data-message-id') &&
+          !element.getAttribute('data-testid') &&
+          index >= 0;
+      });
+
+      base = missingStableIds
+        ? {
+            state: 'degraded',
+            code: 'turn-ids-missing',
+            detail: 'One or more rendered turns require temporary DOM-order identity.',
+            observedAt: isoNow()
+          }
+        : { state: 'healthy', code: 'adapter-ready', observedAt: isoNow() };
     }
 
-    const missingStableIds = turns.some((element, index) => {
-      const role = roleFor(element);
-      if (!role) return false;
-      const messageNode = messageNodeFor(element, role);
-      return !element.getAttribute('data-turn-id') &&
-        !messageNode?.getAttribute('data-message-id') &&
-        !element.getAttribute('data-testid') &&
-        index >= 0;
-    });
-
-    if (missingStableIds) {
-      return {
-        state: 'degraded',
-        code: 'turn-ids-missing',
-        detail: 'One or more rendered turns require temporary DOM-order identity.',
-        observedAt: isoNow()
-      };
-    }
-
-    return { state: 'healthy', code: 'adapter-ready', observedAt: isoNow() };
+    return this.healthMonitor.assess(
+      base,
+      identity.providerConversationId ?? 'provisional-chat'
+    );
   }
 
   observe(callback: (event: ProviderObservation) => void): () => void {

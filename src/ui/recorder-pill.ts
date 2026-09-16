@@ -15,6 +15,8 @@ export type StorageHealthState = 'unknown' | 'healthy' | 'error';
 
 export interface RecorderPillState {
   health: AdapterHealthState;
+  healthCode: string | null;
+  healthDetail: string | null;
   recordingState: RecorderState;
   turnCount: number;
   storageHealth: StorageHealthState;
@@ -81,6 +83,12 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
       cursor: pointer; color: #49454f;
     }
     .meta { margin-top: 6px; font-size: 12px; line-height: 1.45; color: #49454f; }
+    .adapter-health {
+      margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f3edf7;
+      font-size: 11px; line-height: 1.35; color: #49454f; overflow-wrap: anywhere;
+    }
+    .adapter-health.degraded { background: #fff3e0; color: #6d4c00; }
+    .adapter-health.error { background: #f9dedc; color: #8c1d18; }
     .storage {
       margin-top: 8px; padding: 8px 10px; border-radius: 10px; background: #f3edf7;
       font-size: 11px; line-height: 1.35; color: #49454f;
@@ -127,6 +135,9 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
 
   const meta = document.createElement('div');
   meta.className = 'meta';
+  const adapterHealth = document.createElement('div');
+  adapterHealth.className = 'adapter-health';
+  adapterHealth.setAttribute('aria-live', 'polite');
   const storage = document.createElement('div');
   storage.className = 'storage';
   storage.setAttribute('aria-live', 'polite');
@@ -154,7 +165,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
   hint.className = 'hint';
   hint.textContent = 'Minimize or Hide only changes this UI. Recording stops only after explicit Stop confirmation. Checkpoints are explicit local notes and can be added while paused or stopped. Click the extension toolbar icon to restore a hidden recorder.';
   actions.append(primary, checkpoint, stop, library);
-  panel.append(header, meta, storage, actions, hint);
+  panel.append(header, meta, adapterHealth, storage, actions, hint);
 
   const pill = document.createElement('button');
   pill.type = 'button';
@@ -169,6 +180,8 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
 
   let state: RecorderPillState = {
     health: 'healthy',
+    healthCode: null,
+    healthDetail: null,
     recordingState: 'recording',
     turnCount: 0,
     storageHealth: 'unknown',
@@ -202,6 +215,12 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     return `Local archive: saved successfully at ${saved}.`;
   };
 
+  const adapterLabel = (): string => {
+    const code = state.healthCode ? ` · ${state.healthCode}` : '';
+    const detail = state.healthDetail ? ` — ${state.healthDetail}` : '';
+    return `Adapter: ${state.health}${code}${detail}`;
+  };
+
   const render = () => {
     if (state.recordingState === 'stopped') resetStopConfirmation();
 
@@ -222,7 +241,9 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     panel.hidden = visibility !== 'expanded';
     pill.setAttribute('aria-expanded', String(visibility === 'expanded'));
 
-    meta.textContent = `Recorder: ${state.recordingState} · Adapter: ${state.health} · Rendered turns: ${state.turnCount}`;
+    meta.textContent = `Recorder: ${state.recordingState} · Rendered turns: ${state.turnCount}`;
+    adapterHealth.className = `adapter-health ${state.health}`;
+    adapterHealth.textContent = adapterLabel();
     storage.className = `storage${state.storageHealth === 'error' ? ' error' : ''}`;
     storage.textContent = storageLabel();
 
