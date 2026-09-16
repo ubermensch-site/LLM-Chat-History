@@ -3,9 +3,10 @@ import {
   directoryPickerSupported,
   getStoredDirectoryHandle,
   openMirrorSettingsDb,
-  pickAndStoreDirectory,
+  pickDirectory,
   queryDirectoryHealth,
   requestDirectoryPermission,
+  storeDirectoryHandle,
   type MirrorConnectionHealth
 } from '../filesystem/connection';
 
@@ -107,18 +108,18 @@ function render(): void {
 
   const supported = health.state !== 'unsupported';
   const hasHandle = Boolean(currentHandle);
-  primary.disabled = busy || !supported;
+  const alreadyConnected = hasHandle && health.state === 'connected';
+  primary.disabled = busy || !supported || alreadyConnected;
   chooseAnother.disabled = busy || !supported;
   disconnect.disabled = busy || !hasHandle;
   chooseAnother.hidden = !hasHandle;
   disconnect.hidden = !hasHandle;
 
-  primary.textContent =
-    hasHandle && (health.state === 'permission-needed' || health.state === 'denied' || health.state === 'error')
+  primary.textContent = alreadyConnected
+    ? 'Connected'
+    : hasHandle
       ? 'Reconnect'
-      : hasHandle
-        ? 'Check access'
-        : 'Connect folder';
+      : 'Connect folder';
 }
 
 async function refresh(): Promise<void> {
@@ -141,12 +142,16 @@ async function chooseFolder(): Promise<void> {
   busy = true;
   render();
   try {
+    // The picker call occurs before any await/IndexedDB work so it consumes the
+    // user activation from this click directly.
+    const handle = await pickDirectory();
     const db = await dbPromise;
-    health = await pickAndStoreDirectory(db);
-    currentHandle = await getStoredDirectoryHandle(db);
+    await storeDirectoryHandle(db, handle);
+    currentHandle = handle;
+    health = await queryDirectoryHealth(handle);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      await refresh();
+      health = await queryDirectoryHealth(currentHandle);
       return;
     }
     health = {
