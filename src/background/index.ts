@@ -5,6 +5,7 @@ import type {
   CreateCheckpointMessage,
   OpenLibraryMessage,
   RecorderCommandMessage,
+  RefreshMirrorMessage,
   ShowRecorderMessage
 } from '../shared/types';
 import { openMirrorSettingsDb } from '../filesystem/connection';
@@ -14,6 +15,11 @@ import { CoalescingMirrorQueue } from '../filesystem/writer';
 import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
 import { provisionalConversationKey } from '../storage/ids';
+
+type PersistingRequest = Exclude<
+  ContentToBackgroundRequest,
+  OpenLibraryMessage | RefreshMirrorMessage
+>;
 
 let archiveDbPromise: Promise<IDBDatabase> | null = null;
 let repositoryPromise: Promise<ArchiveRepository> | null = null;
@@ -96,12 +102,23 @@ function isOpenLibraryMessage(value: unknown): value is OpenLibraryMessage {
   );
 }
 
+function isRefreshMirrorMessage(value: unknown): value is RefreshMirrorMessage {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<RefreshMirrorMessage>;
+  return (
+    candidate.type === 'LLMCH_REFRESH_MIRROR' &&
+    typeof candidate.conversationId === 'string' &&
+    candidate.conversationId.length > 0
+  );
+}
+
 function isKnownRequest(value: unknown): value is ContentToBackgroundRequest {
   return (
     isProviderObservationMessage(value) ||
     isRecorderCommandMessage(value) ||
     isCreateCheckpointMessage(value) ||
-    isOpenLibraryMessage(value)
+    isOpenLibraryMessage(value) ||
+    isRefreshMirrorMessage(value)
   );
 }
 
@@ -119,7 +136,7 @@ async function showRecorder(tabId: number): Promise<boolean> {
   }
 }
 
-function mirrorIdentity(message: Exclude<ContentToBackgroundRequest, OpenLibraryMessage>): {
+function mirrorIdentity(message: PersistingRequest): {
   providerId: 'chatgpt';
   providerConversationId: string | null;
   sourceSessionId: string;
@@ -149,7 +166,7 @@ function mirrorIdentity(message: Exclude<ContentToBackgroundRequest, OpenLibrary
 
 async function mirrorConversationIdForRequest(
   repository: ArchiveRepository,
-  message: Exclude<ContentToBackgroundRequest, OpenLibraryMessage>
+  message: PersistingRequest
 ): Promise<string | null> {
   const identity = mirrorIdentity(message);
   if (!identity) return null;
@@ -173,13 +190,30 @@ async function persistMirrorStatus(status: MirrorRuntimeStatus): Promise<void> {
   await chrome.storage.local.set({ [MIRROR_RUNTIME_STATUS_KEY]: status });
 }
 
-async function mirrorAfterCanonicalPersistence(
-  repository: ArchiveRepository,
-  message: Exclude<ContentToBackgroundRequest, OpenLibraryMessage>
+async function reportMirrorError(
+  conversationId: string | null,
+  error: unknown
 ): Promise<void> {
-  const conversationId = await mirrorConversationIdForRequest(repository, message);
-  if (!conversationId) return;
+  const status: MirrorRuntimeStatus = {
+    state: 'error',
+    folderName: null,
+    conversationId,
+    path: null,
+    detail: error instanceof Error ? error.message : String(error),
+    updatedAt: new Date().toISOString()
+  };
+  console.warn('[LLM Chat History] optional filesystem mirror failed', error);
+  try {
+    await persistMirrorStatus(status);
+  } catch (statusError) {
+    console.warn('[LLM Chat History] unable to persist mirror health', statusError);
+  }
+}
 
+async function mirrorConversationById(
+  repository: ArchiveRepository,
+  conversationId: string
+): Promise<void> {
   try {
     await mirrorQueue.enqueue(conversationId, async () => {
       const [archiveDb, settingsDb] = await Promise.all([getArchiveDb(), getMirrorSettingsDb()]);
@@ -192,20 +226,22 @@ async function mirrorAfterCanonicalPersistence(
       await persistMirrorStatus(status);
     });
   } catch (error) {
-    const status: MirrorRuntimeStatus = {
-      state: 'error',
-      folderName: null,
-      conversationId,
-      path: null,
-      detail: error instanceof Error ? error.message : String(error),
-      updatedAt: new Date().toISOString()
-    };
-    console.warn('[LLM Chat History] optional filesystem mirror failed', error);
-    try {
-      await persistMirrorStatus(status);
-    } catch (statusError) {
-      console.warn('[LLM Chat History] unable to persist mirror health', statusError);
-    }
+    await reportMirrorError(conversationId, error);
+  }
+}
+
+async function mirrorAfterCanonicalPersistence(
+  repository: ArchiveRepository,
+  message: PersistingRequest
+): Promise<void> {
+  try {
+    const conversationId = await mirrorConversationIdForRequest(repository, message);
+    if (!conversationId) return;
+    await mirrorConversationById(repository, conversationId);
+  } catch (error) {
+    // This entire path is optional. Even conversation lookup failures must never
+    // propagate into the canonical persistence ACK.
+    await reportMirrorError(null, error);
   }
 }
 
@@ -235,6 +271,17 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
     return true;
   }
 
+  if (message.type === 'LLMCH_REFRESH_MIRROR') {
+    void getRepository()
+      .then((repository) => mirrorConversationById(repository, message.conversationId))
+      .then(() => sendResponse({ ok: true } satisfies BackgroundAck))
+      .catch((error: unknown) => {
+        const text = error instanceof Error ? error.message : String(error);
+        sendResponse({ ok: false, error: text } satisfies BackgroundAck);
+      });
+    return true;
+  }
+
   void getRepository()
     .then(async (repository) => {
       let recordingState;
@@ -255,7 +302,7 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
       });
 
       // Filesystem mirroring is optional. Hold the worker alive long enough to attempt
-      // the coalesced write, but never let mirror failure change the canonical ACK.
+      // the coalesced write, but never let any mirror failure change the canonical ACK.
       await mirrorAfterCanonicalPersistence(repository, message);
 
       const ack: BackgroundAck = recordingState
