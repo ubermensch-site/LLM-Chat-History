@@ -1,3 +1,4 @@
+import { conversationDisplayTitle } from '../storage/conversation';
 import type { ArchiveConversation, ArchiveEvent, ArchiveMessage } from '../storage/schema';
 
 export const ARCHIVE_EXPORT_SCHEMA = 'llm-chat-history/archive-export';
@@ -39,7 +40,7 @@ function stateEventLabel(event: ArchiveEvent): string | null {
 
 export function renderMarkdownExport(bundle: ArchiveExportBundle): string {
   const { conversation, messages, events, exportedAt } = bundle;
-  const title = escapeMetadata(conversation.title || 'Untitled conversation');
+  const title = escapeMetadata(conversationDisplayTitle(conversation));
   const lines: string[] = [
     `# ${title}`,
     '',
@@ -126,6 +127,6 @@ export function exportFilename(
 ): string {
   const timestamp = conversation.createdAt.replace(/[:.]/g, '-');
   return `${timestamp}__${conversation.providerId}__${filesystemSafeSlug(
-    conversation.title || 'untitled-conversation'
+    conversationDisplayTitle(conversation, 'untitled-conversation')
   )}.${extension}`;
 }

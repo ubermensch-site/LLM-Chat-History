@@ -35,6 +35,8 @@ export interface ArchiveConversation {
   provisional: boolean;
   sourceUrl: string;
   title: string | null;
+  customTitle?: string;
+  archivedAt?: string;
   createdAt: string;
   updatedAt: string;
   lastObservedAt: string;

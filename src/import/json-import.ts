@@ -80,6 +80,11 @@ function timestamp(value: unknown, path: string): string {
   return result;
 }
 
+function optionalTimestamp(value: unknown, path: string): string | undefined {
+  if (value === undefined) return undefined;
+  return timestamp(value, path);
+}
+
 function providerId(value: unknown, path: string): 'chatgpt' {
   if (value !== 'chatgpt') fail(path, 'unsupported provider');
   return value;
@@ -137,6 +142,10 @@ function parseConversation(value: unknown): ArchiveConversation {
     input.provisionalKey,
     'conversation.provisionalKey'
   );
+  const customTitle = optionalString(input.customTitle, 'conversation.customTitle');
+  const archivedAt = optionalTimestamp(input.archivedAt, 'conversation.archivedAt');
+  if (customTitle) conversation.customTitle = customTitle;
+  if (archivedAt) conversation.archivedAt = archivedAt;
 
   if (conversation.providerConversationId) {
     const expected = providerConversationKey(

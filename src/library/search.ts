@@ -1,3 +1,4 @@
+import { conversationDisplayTitle } from '../storage/conversation';
 import type { ArchiveConversation, ArchiveMessage } from '../storage/schema';
 
 export interface LibraryRecord {
@@ -15,11 +16,13 @@ export function matchesLibraryQuery(record: LibraryRecord, query: string): boole
 
   const conversation = record.conversation;
   const metadata = [
+    conversationDisplayTitle(conversation),
     conversation.title ?? '',
     conversation.providerId,
     conversation.providerConversationId ?? '',
     conversation.sourceUrl,
-    conversation.recordingState
+    conversation.recordingState,
+    conversation.archivedAt ? 'archived' : 'active'
   ]
     .join('\n')
     .toLocaleLowerCase();
