@@ -34,6 +34,7 @@ export interface RecorderPillOptions {
   onCommand?: (command: RecorderCommand) => void | Promise<void>;
   onCheckpoint?: (name: string, note: string | null) => void | Promise<void>;
   onImportHistory?: () => Promise<HistoricalImportSummary>;
+  onDownloadLiveQaReport?: () => void | Promise<void>;
   onOpenLibrary?: () => void | Promise<void>;
 }
 
@@ -173,6 +174,14 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     'aria-label',
     'Scroll through this ChatGPT conversation and import older rendered history into the local archive'
   );
+  const qaReport = document.createElement('button');
+  qaReport.type = 'button';
+  qaReport.className = 'action';
+  qaReport.textContent = 'QA report';
+  qaReport.setAttribute(
+    'aria-label',
+    'Download a privacy-safe live QA report with structural counts and recorder/archive state only'
+  );
   const stop = document.createElement('button');
   stop.type = 'button';
   stop.className = 'action danger';
@@ -184,8 +193,8 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
 
   const hint = document.createElement('div');
   hint.className = 'hint';
-  hint.textContent = 'Minimize or Hide only changes this UI. Recording stops only after explicit Stop confirmation. Import history is manual: it scrolls the current chat, captures rendered older turns through the same local archive, then restores your position. It is available only while recording.';
-  actions.append(primary, checkpoint, importHistory, stop, library);
+  hint.textContent = 'Minimize or Hide only changes this UI. Recording stops only after explicit Stop confirmation. Import history is manual and restores your scroll position. QA report downloads structural counts/state only—no prompt, answer, title, raw URL, or conversation ID.';
+  actions.append(primary, checkpoint, importHistory, qaReport, stop, library);
   panel.append(header, meta, adapterHealth, storage, historyStatus, actions, hint);
 
   const pill = document.createElement('button');
@@ -299,6 +308,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
       state.recordingState !== 'recording' ||
       state.health === 'error' ||
       !options.onImportHistory;
+    qaReport.disabled = busy || !options.onDownloadLiveQaReport;
     stop.disabled = busy || state.recordingState === 'stopped';
     library.disabled = busy;
   };
@@ -361,6 +371,24 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     }
   };
 
+  const downloadQaReport = async () => {
+    if (!options.onDownloadLiveQaReport || busy) return;
+    busy = true;
+    historyError = false;
+    historyMessage = 'Preparing privacy-safe live QA report…';
+    render();
+    try {
+      await options.onDownloadLiveQaReport();
+      historyMessage = 'Live QA report downloaded. It contains structural counts/state only.';
+    } catch (error) {
+      historyError = true;
+      historyMessage = `QA report failed: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      busy = false;
+      render();
+    }
+  };
+
   const armOrConfirmStop = () => {
     if (busy || state.recordingState === 'stopped') return;
     const result = advanceStopConfirmation(stopConfirmation, Date.now(), STOP_CONFIRMATION_MS);
@@ -401,6 +429,9 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
   });
   importHistory.addEventListener('click', () => {
     void importHistoricalTurns();
+  });
+  qaReport.addEventListener('click', () => {
+    void downloadQaReport();
   });
   stop.addEventListener('click', armOrConfirmStop);
   library.addEventListener('click', () => {
