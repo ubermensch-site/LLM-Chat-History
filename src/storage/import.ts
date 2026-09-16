@@ -77,8 +77,7 @@ function mergedConversation(
     provisional: providerConversationId === null,
     sourceUrl: metadata.sourceUrl,
     title: metadata.title,
-    createdAt:
-      imported.createdAt < existing.createdAt ? imported.createdAt : existing.createdAt,
+    createdAt: imported.createdAt < existing.createdAt ? imported.createdAt : existing.createdAt,
     updatedAt: imported.updatedAt > existing.updatedAt ? imported.updatedAt : existing.updatedAt,
     lastObservedAt:
       imported.lastObservedAt > existing.lastObservedAt
@@ -132,6 +131,8 @@ function mappedEvent(
   if (targetConversationId !== sourceConversationId) {
     if (event.type === 'turn-suppressed' && typeof event.data.providerTurnId === 'string') {
       id = `suppressed:${targetConversationId}:${encodeURIComponent(event.data.providerTurnId)}`;
+    } else if (event.type === 'checkpoint') {
+      id = `checkpoint:import:${encodeURIComponent(sourceConversationId)}:${encodeURIComponent(event.id)}`;
     } else {
       id = `import:${encodeURIComponent(sourceConversationId)}:${event.id}`;
     }
@@ -249,12 +250,7 @@ export async function importArchiveBundle(
       }
     }
 
-    const finalConversation = mergedConversation(
-      existing,
-      imported,
-      targetId,
-      finalMessages.size
-    );
+    const finalConversation = mergedConversation(existing, imported, targetId, finalMessages.size);
 
     const existingEvents = new Map(allEvents.map((event) => [event.id, event] as const));
     const eventWrites: ArchiveEvent[] = [];
@@ -271,10 +267,7 @@ export async function importArchiveBundle(
       }
     }
 
-    if (
-      bundle.project &&
-      finalConversation.projectId === bundle.project.id
-    ) {
+    if (bundle.project && finalConversation.projectId === bundle.project.id) {
       projects.put(mergedProject(existingProject, bundle.project));
     }
     conversations.put(finalConversation);
