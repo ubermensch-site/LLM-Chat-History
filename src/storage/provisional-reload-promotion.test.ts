@@ -139,6 +139,44 @@ describe('Scenario 2 provisional identity across a document reload', () => {
     expect(await repository.listMessages(conversations[0]!.id)).toHaveLength(2);
   });
 
+  it('reconciles the same rendered turns when transport/session identity changes', async () => {
+    const repository = await createRepository();
+    const provisionalSession = 'content-only-provisional';
+    const stableSession = 'tab:104';
+
+    // This reproduces the authenticated failure: the provisional chat and its two
+    // rendered turns are persisted first, but the stable route later reaches the
+    // background under a different source-session identity.
+    await repository.persistObservation(
+      conversation(provisionalSession, null, '2026-09-17T12:12:15.948Z')
+    );
+    await repository.persistObservation(
+      snapshot(provisionalSession, null, '2026-09-17T12:13:30.000Z')
+    );
+
+    await repository.persistObservation(
+      conversation(
+        stableSession,
+        'stable-conversation',
+        '2026-09-17T12:13:40.000Z',
+        'Exact reply'
+      )
+    );
+    await repository.persistObservation(
+      snapshot(stableSession, 'stable-conversation', '2026-09-17T12:13:46.407Z')
+    );
+
+    const conversations = await repository.listConversations();
+    expect(conversations).toHaveLength(1);
+    expect(conversations[0]).toMatchObject({
+      providerConversationId: 'stable-conversation',
+      provisional: false,
+      title: 'Exact reply',
+      messageCount: 2
+    });
+    expect(await repository.listMessages(conversations[0]!.id)).toHaveLength(2);
+  });
+
   it('ignores an older provisional snapshot that arrives after stable promotion', async () => {
     const repository = await createRepository();
     const sourceSessionId = stableSourceSessionId('content-session-before', 91);
