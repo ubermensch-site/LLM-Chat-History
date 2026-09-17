@@ -21,6 +21,11 @@ const buildOptions = {
   outdir: 'dist',
   format: 'iife',
   target: ['chrome120'],
+  loader: {
+    '.woff': 'file',
+    '.woff2': 'file'
+  },
+  assetNames: 'assets/[name]-[hash]',
   // Keep source mapping useful during local development without shipping source maps
   // in release/CI production artifacts.
   sourcemap: watch ? 'inline' : false,
