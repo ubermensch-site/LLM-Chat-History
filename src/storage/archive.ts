@@ -153,6 +153,62 @@ function renderedTurnSequenceMatches(
   });
 }
 
+const PARTIAL_PROMOTION_WINDOW_MS = 120_000;
+
+function partialRenderedTurnPromotionMatches(
+  messages: readonly ArchiveMessage[],
+  turns: readonly ProviderTurnObservation[]
+): boolean {
+  if (turns.length < 2 || messages.length !== turns.length) return false;
+  if (turns.some((turn) => turn.partial)) return false;
+
+  const orderedMessages = [...messages].sort(
+    (a, b) => a.orderHint - b.orderHint || a.firstObservedAt.localeCompare(b.firstObservedAt)
+  );
+  const orderedTurns = [...turns].sort(
+    (a, b) => a.orderHint - b.orderHint || a.observedAt.localeCompare(b.observedAt)
+  );
+  const partialIndexes = orderedMessages
+    .map((message, index) => message.partial ? index : -1)
+    .filter((index) => index >= 0);
+
+  if (partialIndexes.length !== 1) return false;
+  const partialIndex = partialIndexes[0]!;
+  if (partialIndex !== orderedMessages.length - 1) return false;
+  if (orderedMessages[partialIndex]!.role !== 'assistant' || orderedTurns[partialIndex]!.role !== 'assistant') {
+    return false;
+  }
+
+  let matchedUser = false;
+  for (let index = 0; index < orderedMessages.length; index += 1) {
+    const message = orderedMessages[index]!;
+    const turn = orderedTurns[index]!;
+    if (message.role !== turn.role) return false;
+    if (index === partialIndex) continue;
+    if (message.partial) return false;
+    if (
+      normalizedRenderedText(message.plainText) !== normalizedRenderedText(turn.plainText) ||
+      normalizedRenderedText(message.markdown) !== normalizedRenderedText(turn.markdown)
+    ) {
+      return false;
+    }
+    if (message.role === 'user') matchedUser = true;
+  }
+
+  return matchedUser;
+}
+
+function withinPartialPromotionWindow(
+  candidate: ArchiveConversation,
+  stableConversation: ArchiveConversation
+): boolean {
+  const candidateTime = Date.parse(candidate.lastObservedAt);
+  const stableTime = Date.parse(stableConversation.lastObservedAt);
+  if (!Number.isFinite(candidateTime) || !Number.isFinite(stableTime)) return false;
+  const delta = stableTime - candidateTime;
+  return delta >= 0 && delta <= PARTIAL_PROMOTION_WINDOW_MS;
+}
+
 export class ArchiveRepository {
   constructor(private readonly db: IDBDatabase) {}
 
@@ -403,8 +459,17 @@ export class ArchiveRepository {
       const renderedSequenceMatches = eligible.filter(({ messages }) =>
         renderedTurnSequenceMatches(messages, turns)
       );
-      if (renderedSequenceMatches.length !== 1) return;
-      removable = [renderedSequenceMatches[0]!.conversation];
+      if (renderedSequenceMatches.length > 1) return;
+      if (renderedSequenceMatches.length === 1) {
+        removable = [renderedSequenceMatches[0]!.conversation];
+      } else {
+        const partialPromotionMatches = eligible.filter(({ conversation, messages }) =>
+          withinPartialPromotionWindow(conversation, stableConversation) &&
+          partialRenderedTurnPromotionMatches(messages, turns)
+        );
+        if (partialPromotionMatches.length !== 1) return;
+        removable = [partialPromotionMatches[0]!.conversation];
+      }
     }
 
     const removableIds = new Set(removable.map((conversation) => conversation.id));
