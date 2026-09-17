@@ -69,7 +69,7 @@ async function enrichVisibleCards(): Promise<void> {
       const location = conversationLocation(conversation, project);
       const tags = (conversation.tags ?? []).slice(0, 2);
 
-      // Set the marker before replacing children so our own DOM work does not schedule itself again.
+      // Mark before replacing children so our own DOM work cannot reschedule the same card.
       button.dataset.cardEnhanced = conversation.updatedAt;
       button.setAttribute(
         'aria-label',
@@ -82,6 +82,7 @@ async function enrichVisibleCards(): Promise<void> {
       const provider = appendTextSpan(kicker, 'provider-pill', providerDisplayName(conversation.providerId));
       if (status) provider.textContent = `${provider.textContent} · ${status}`;
       appendTextSpan(kicker, 'conversation-time', relativeConversationTime(conversation.updatedAt));
+      button.append(kicker);
 
       appendTextSpan(button, 'conversation-title', conversationDisplayTitle(conversation));
 
@@ -111,7 +112,7 @@ async function enrichVisibleCards(): Promise<void> {
         metaRow.append(tagsElement);
       }
 
-      button.append(kicker, metaRow);
+      button.append(metaRow);
     })
   );
 }
@@ -129,7 +130,7 @@ function scheduleEnhancement(): void {
 
 const observer = list
   ? new MutationObserver(() => {
-      if (list.querySelector('button.conversation[data-conversation-id]:not([data-card-enhanced])')) {
+      if (list?.querySelector('button.conversation[data-conversation-id]:not([data-card-enhanced])')) {
         scheduleEnhancement();
       }
     })
