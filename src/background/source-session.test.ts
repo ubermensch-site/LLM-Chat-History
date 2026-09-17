@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+  authoritativeCurrentTabUrl,
   isStaleProvisionalObservationForCurrentTab,
   stableChatConversationIdFromUrl,
   stableSourceSessionId
@@ -33,5 +34,56 @@ describe('background source-session helpers', () => {
   it('allows a real new-chat provisional observation while the browser tab is on home', () => {
     expect(isStaleProvisionalObservationForCurrentTab(null, 'https://chatgpt.com/')).toBe(false);
     expect(isStaleProvisionalObservationForCurrentTab(null, undefined)).toBe(false);
+  });
+
+  it('uses the live tab URL instead of a stale sender document URL', async () => {
+    const lookup = vi.fn(async () => ({ url: 'https://chatgpt.com/c/stable-chat' }));
+    const currentUrl = await authoritativeCurrentTabUrl(
+      77,
+      'https://chatgpt.com/',
+      lookup
+    );
+
+    expect(lookup).toHaveBeenCalledWith(77);
+    expect(currentUrl).toBe('https://chatgpt.com/c/stable-chat');
+    expect(isStaleProvisionalObservationForCurrentTab(null, currentUrl)).toBe(true);
+  });
+
+  it('prefers a pending navigation URL over the committed tab URL', async () => {
+    const currentUrl = await authoritativeCurrentTabUrl(
+      78,
+      'https://chatgpt.com/',
+      async () => ({
+        url: 'https://chatgpt.com/',
+        pendingUrl: 'https://chatgpt.com/c/pending-stable-chat'
+      })
+    );
+
+    expect(currentUrl).toBe('https://chatgpt.com/c/pending-stable-chat');
+    expect(isStaleProvisionalObservationForCurrentTab(null, currentUrl)).toBe(true);
+  });
+
+  it('falls back to the sender URL when the live tab lookup fails', async () => {
+    const currentUrl = await authoritativeCurrentTabUrl(
+      79,
+      'https://chatgpt.com/',
+      async () => {
+        throw new Error('tab disappeared');
+      }
+    );
+
+    expect(currentUrl).toBe('https://chatgpt.com/');
+  });
+
+  it('does not perform a live lookup when there is no browser tab id', async () => {
+    const lookup = vi.fn(async () => ({ url: 'https://chatgpt.com/c/should-not-be-read' }));
+    const currentUrl = await authoritativeCurrentTabUrl(
+      undefined,
+      'https://chatgpt.com/',
+      lookup
+    );
+
+    expect(currentUrl).toBe('https://chatgpt.com/');
+    expect(lookup).not.toHaveBeenCalled();
   });
 });

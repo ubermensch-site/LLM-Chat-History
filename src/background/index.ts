@@ -18,6 +18,7 @@ import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
 import { provisionalConversationKey } from '../storage/ids';
 import {
+  authoritativeCurrentTabUrl,
   isStaleProvisionalObservationForCurrentTab,
   stableSourceSessionId
 } from './source-session';
@@ -199,16 +200,44 @@ function mirrorIdentity(message: PersistingRequest): {
   };
 }
 
-function isStaleProviderObservationFromReplacedDocument(
+async function isStaleProviderObservationFromReplacedDocument(
   message: PersistingRequest,
   sender: chrome.runtime.MessageSender
-): boolean {
+): Promise<boolean> {
   if (message.type !== 'LLMCH_PROVIDER_OBSERVATION') return false;
   const identity = mirrorIdentity(message);
-  if (!identity) return false;
-  return isStaleProvisionalObservationForCurrentTab(
-    identity.providerConversationId,
-    sender.tab?.url
+  if (!identity || identity.providerConversationId !== null) return false;
+
+  const currentTabUrl = await authoritativeCurrentTabUrl(
+    sender.tab?.id,
+    sender.tab?.url,
+    (tabId) => chrome.tabs.get(tabId)
+  );
+  return isStaleProvisionalObservationForCurrentTab(null, currentTabUrl);
+}
+
+async function isLateProvisionalTurnAgainstStableSessionOwner(
+  repository: ArchiveRepository,
+  message: PersistingRequest
+): Promise<boolean> {
+  if (message.type !== 'LLMCH_PROVIDER_OBSERVATION') return false;
+  if (
+    message.observation.type !== 'turn-snapshot' &&
+    message.observation.type !== 'turn-upsert'
+  ) {
+    return false;
+  }
+
+  const identity = mirrorIdentity(message);
+  if (!identity || identity.providerConversationId !== null) return false;
+
+  const provisionalKey = provisionalConversationKey(identity.providerId, identity.sourceSessionId);
+  const conversations = await repository.listConversations();
+  return conversations.some(
+    (conversation) =>
+      conversation.providerId === identity.providerId &&
+      conversation.provisionalKey === provisionalKey &&
+      !conversation.provisional
   );
 }
 
@@ -388,49 +417,51 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
 
   const persistenceMessage = withStableSourceSession(message, sender);
 
-  if (isStaleProviderObservationFromReplacedDocument(persistenceMessage, sender)) {
-    sendResponse({ ok: true, persistedAt: new Date().toISOString() } satisfies BackgroundAck);
-    return true;
-  }
+  void (async () => {
+    if (await isStaleProviderObservationFromReplacedDocument(persistenceMessage, sender)) {
+      sendResponse({ ok: true, persistedAt: new Date().toISOString() } satisfies BackgroundAck);
+      return;
+    }
 
-  void getRepository()
-    .then(async (repository) => {
-      let recordingState;
-      if (persistenceMessage.type === 'LLMCH_RECORDER_COMMAND') {
-        recordingState = await repository.applyRecorderCommand(persistenceMessage);
-      } else if (persistenceMessage.type === 'LLMCH_CREATE_CHECKPOINT') {
-        recordingState = await repository.createCheckpoint(persistenceMessage);
-      } else {
-        recordingState = await repository.persistObservation(persistenceMessage);
-      }
-      return { repository, recordingState };
-    })
-    .then(async ({ repository, recordingState }) => {
-      const persistedAt = new Date().toISOString();
-      await chrome.storage.local.set({
-        lastPersistenceAt: persistedAt,
-        lastPersistenceError: null
-      });
+    const repository = await getRepository();
+    if (await isLateProvisionalTurnAgainstStableSessionOwner(repository, persistenceMessage)) {
+      sendResponse({ ok: true, persistedAt: new Date().toISOString() } satisfies BackgroundAck);
+      return;
+    }
 
-      const ack: BackgroundAck = recordingState
-        ? { ok: true, recordingState, persistedAt }
-        : { ok: true, persistedAt };
-      sendResponse(ack);
+    let recordingState;
+    if (persistenceMessage.type === 'LLMCH_RECORDER_COMMAND') {
+      recordingState = await repository.applyRecorderCommand(persistenceMessage);
+    } else if (persistenceMessage.type === 'LLMCH_CREATE_CHECKPOINT') {
+      recordingState = await repository.createCheckpoint(persistenceMessage);
+    } else {
+      recordingState = await repository.persistObservation(persistenceMessage);
+    }
 
-      // The canonical ACK is deliberately sent first. Optional filesystem work runs
-      // from the latest IndexedDB state and can coalesce subsequent recorder events.
-      void mirrorAfterCanonicalPersistence(repository, persistenceMessage);
-    })
-    .catch(async (error: unknown) => {
-      const text = error instanceof Error ? error.message : String(error);
-      console.error('[LLM Chat History] persistence failure', error);
-      await chrome.storage.local.set({
-        lastPersistenceError: text,
-        lastPersistenceErrorAt: new Date().toISOString()
-      });
-      const ack: BackgroundAck = { ok: false, error: text };
-      sendResponse(ack);
+    const persistedAt = new Date().toISOString();
+    await chrome.storage.local.set({
+      lastPersistenceAt: persistedAt,
+      lastPersistenceError: null
     });
+
+    const ack: BackgroundAck = recordingState
+      ? { ok: true, recordingState, persistedAt }
+      : { ok: true, persistedAt };
+    sendResponse(ack);
+
+    // The canonical ACK is deliberately sent first. Optional filesystem work runs
+    // from the latest IndexedDB state and can coalesce subsequent recorder events.
+    void mirrorAfterCanonicalPersistence(repository, persistenceMessage);
+  })().catch(async (error: unknown) => {
+    const text = error instanceof Error ? error.message : String(error);
+    console.error('[LLM Chat History] persistence failure', error);
+    await chrome.storage.local.set({
+      lastPersistenceError: text,
+      lastPersistenceErrorAt: new Date().toISOString()
+    });
+    const ack: BackgroundAck = { ok: false, error: text };
+    sendResponse(ack);
+  });
 
   return true;
 });

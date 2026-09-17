@@ -7,6 +7,26 @@ export function stableSourceSessionId(
     : contentSourceSessionId;
 }
 
+export interface TabRouteSnapshot {
+  url?: string | undefined;
+  pendingUrl?: string | undefined;
+}
+
+export async function authoritativeCurrentTabUrl(
+  tabId: number | undefined,
+  fallbackUrl: string | undefined,
+  lookup: (tabId: number) => Promise<TabRouteSnapshot>
+): Promise<string | undefined> {
+  if (!Number.isInteger(tabId) || (tabId ?? -1) < 0) return fallbackUrl;
+
+  try {
+    const tab = await lookup(tabId!);
+    return tab.pendingUrl ?? tab.url ?? fallbackUrl;
+  } catch {
+    return fallbackUrl;
+  }
+}
+
 export function stableChatConversationIdFromUrl(url: string | undefined): string | null {
   if (!url) return null;
   try {
