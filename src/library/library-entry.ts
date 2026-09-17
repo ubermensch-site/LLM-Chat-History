@@ -9,3 +9,4 @@ import './live-qa-evidence-ui';
 import './privacy-notices';
 import './ux-enhancements';
 import './visible-activity-ui';
+import './conversation-card-ui';
