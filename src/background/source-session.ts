@@ -8,8 +8,8 @@ export function stableSourceSessionId(
 }
 
 export interface TabRouteSnapshot {
-  url?: string;
-  pendingUrl?: string;
+  url?: string | undefined;
+  pendingUrl?: string | undefined;
 }
 
 export async function authoritativeCurrentTabUrl(
