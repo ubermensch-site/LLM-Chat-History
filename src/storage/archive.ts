@@ -33,6 +33,7 @@ interface ConversationResolution {
   created: boolean;
   identified: boolean;
   titleChanged: boolean;
+  stale: boolean;
 }
 
 interface ResolveConversationInput {
@@ -135,24 +136,71 @@ export class ArchiveRepository {
       : null;
     const provisionalKey = provisionalConversationKey(providerId, input.sourceSessionId);
 
+    const staleResolution = async (
+      conversation: ArchiveConversation
+    ): Promise<ConversationResolution> => {
+      await transactionDone(transaction);
+      return {
+        conversation,
+        created: false,
+        identified: false,
+        titleChanged: false,
+        stale: true
+      };
+    };
+
     let existing: ArchiveConversation | undefined;
     let identified = false;
 
     if (stableProviderKey) {
-      existing = await requestToPromise<ArchiveConversation | undefined>(
+      const stableExisting = await requestToPromise<ArchiveConversation | undefined>(
         store.index(INDEXES.conversations.providerKey).get(stableProviderKey)
       );
+      const sessionOwner = await requestToPromise<ArchiveConversation | undefined>(
+        store.index(INDEXES.conversations.provisionalKey).get(provisionalKey)
+      );
 
-      if (!existing) {
-        existing = await requestToPromise<ArchiveConversation | undefined>(
-          store.index(INDEXES.conversations.provisionalKey).get(provisionalKey)
-        );
-        identified = Boolean(existing);
+      if (stableExisting) {
+        // A stable provider identity is authoritative. SPA navigation can move one
+        // tab between already-known conversations, so transfer the unique
+        // tab/session claim away from the previous owner before claiming it here.
+        if (sessionOwner && sessionOwner.id !== stableExisting.id) {
+          const releasedOwner = { ...sessionOwner };
+          delete releasedOwner.provisionalKey;
+          store.put(releasedOwner);
+        }
+        existing = stableExisting;
+      } else if (sessionOwner?.provisional) {
+        existing = sessionOwner;
+        identified = true;
+      } else {
+        // The tab can navigate directly to a stable conversation that has not been
+        // archived before. Release any older stable session owner before creating
+        // the new stable record. Staleness protection is intentionally limited to
+        // provisional observations below; provider conversation IDs are explicit.
+        if (sessionOwner) {
+          const releasedOwner = { ...sessionOwner };
+          delete releasedOwner.provisionalKey;
+          store.put(releasedOwner);
+        }
+        existing = undefined;
       }
     } else {
       existing = await requestToPromise<ArchiveConversation | undefined>(
         store.index(INDEXES.conversations.provisionalKey).get(provisionalKey)
       );
+
+      if (existing && !existing.provisional) {
+        // A stable conversation keeps the tab/session claim after promotion so an
+        // older observation from the document being replaced cannot recreate the
+        // provisional archive. A genuinely newer provisional route releases the
+        // claim and starts the next local conversation in this tab.
+        if (now <= existing.lastObservedAt) return staleResolution(existing);
+        const releasedOwner = { ...existing };
+        delete releasedOwner.provisionalKey;
+        store.put(releasedOwner);
+        existing = undefined;
+      }
     }
 
     const created = !existing;
@@ -175,7 +223,10 @@ export class ArchiveRepository {
 
       if (stableProviderKey) {
         conversation.providerKey = stableProviderKey;
-        delete conversation.provisionalKey;
+        // Keep the provisional key as the current tab/session ownership claim.
+        // This closes the reload race where an older provisional snapshot can
+        // arrive after stable identity has already been persisted.
+        conversation.provisionalKey = provisionalKey;
         conversation.provisional = false;
       } else {
         conversation.provisionalKey = provisionalKey;
@@ -196,8 +247,12 @@ export class ArchiveRepository {
         recordingStateUpdatedAt: now
       };
 
-      if (stableProviderKey) conversation.providerKey = stableProviderKey;
-      else conversation.provisionalKey = provisionalKey;
+      if (stableProviderKey) {
+        conversation.providerKey = stableProviderKey;
+        conversation.provisionalKey = provisionalKey;
+      } else {
+        conversation.provisionalKey = provisionalKey;
+      }
     }
 
     store.put(conversation);
@@ -207,7 +262,8 @@ export class ArchiveRepository {
       conversation,
       created,
       identified,
-      titleChanged: !created && input.title !== undefined && input.title !== previousTitle
+      titleChanged: !created && input.title !== undefined && input.title !== previousTitle,
+      stale: false
     };
   }
 
@@ -221,6 +277,8 @@ export class ArchiveRepository {
     result: ConversationResolution,
     observedAt: string
   ): Promise<void> {
+    if (result.stale) return;
+
     if (result.created) {
       await this.appendEvent(
         archiveEvent(result.conversation.id, 'conversation-created', observedAt, {
@@ -330,6 +388,7 @@ export class ArchiveRepository {
 
     const conversation = resolution.conversation;
     const state = conversation.recordingState;
+    if (resolution.stale) return state;
 
     if (state !== 'recording') {
       await this.suppressTurn(conversation, turn, state);
@@ -475,6 +534,7 @@ export class ArchiveRepository {
         ? message.observation.observedAt
         : first.observedAt
     );
+    if (resolution.stale) return resolution.conversation.recordingState;
 
     const previous = await this.listMessages(resolution.conversation.id);
     let state: RecorderState = resolution.conversation.recordingState;
@@ -531,6 +591,7 @@ export class ArchiveRepository {
       observedAt: message.observedAt
     });
     await this.recordResolutionEvents(resolution, message.observedAt);
+    if (resolution.stale) return resolution.conversation.recordingState;
 
     const current = resolution.conversation.recordingState;
     const next = transitionRecorderState(current, message.command);
@@ -571,6 +632,8 @@ export class ArchiveRepository {
       observedAt: message.observedAt
     });
     await this.recordResolutionEvents(resolution, message.observedAt);
+    if (resolution.stale) return resolution.conversation.recordingState;
+
     await persistCheckpoint(
       this.db,
       resolution.conversation.id,

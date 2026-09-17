@@ -139,6 +139,81 @@ describe('Scenario 2 provisional identity across a document reload', () => {
     expect(await repository.listMessages(conversations[0]!.id)).toHaveLength(2);
   });
 
+  it('ignores an older provisional snapshot that arrives after stable promotion', async () => {
+    const repository = await createRepository();
+    const sourceSessionId = stableSourceSessionId('content-session-before', 91);
+
+    // The QA report taken on the home route creates the zero-message provisional
+    // record before ChatGPT assigns the stable conversation route.
+    await repository.persistObservation(
+      conversation(sourceSessionId, null, '2026-09-17T05:01:39.220Z')
+    );
+
+    // The replacement document wins the transport race and promotes the archive.
+    await repository.persistObservation(
+      conversation(
+        sourceSessionId,
+        'stable-conversation',
+        '2026-09-17T05:02:02.000Z',
+        'Reply scenario 2 identity test passed'
+      )
+    );
+    await repository.persistObservation(
+      snapshot(sourceSessionId, 'stable-conversation', '2026-09-17T05:02:02.100Z')
+    );
+
+    // A delayed snapshot from the document being replaced carries an older
+    // observation time. It must not recreate an Untitled provisional copy.
+    await repository.persistObservation(
+      conversation(sourceSessionId, null, '2026-09-17T05:01:58.000Z')
+    );
+    await repository.persistObservation(
+      snapshot(sourceSessionId, null, '2026-09-17T05:01:58.100Z')
+    );
+
+    const conversations = await repository.listConversations();
+    expect(conversations).toHaveLength(1);
+    expect(conversations[0]).toMatchObject({
+      providerConversationId: 'stable-conversation',
+      provisional: false,
+      title: 'Reply scenario 2 identity test passed',
+      messageCount: 2
+    });
+    expect(await repository.listMessages(conversations[0]!.id)).toHaveLength(2);
+    const events = await repository.listEvents(conversations[0]!.id);
+    expect(events.filter((event) => event.type === 'conversation-created')).toHaveLength(1);
+  });
+
+  it('releases the stable session claim when a genuinely newer new chat starts', async () => {
+    const repository = await createRepository();
+    const sourceSessionId = stableSourceSessionId('content-session', 92);
+
+    await repository.persistObservation(
+      conversation(sourceSessionId, null, '2026-09-17T05:01:00.000Z')
+    );
+    await repository.persistObservation(
+      conversation(
+        sourceSessionId,
+        'first-stable-conversation',
+        '2026-09-17T05:02:00.000Z',
+        'First saved chat'
+      )
+    );
+    await repository.persistObservation(
+      snapshot(sourceSessionId, 'first-stable-conversation', '2026-09-17T05:02:01.000Z')
+    );
+
+    await repository.persistObservation(
+      conversation(sourceSessionId, null, '2026-09-17T05:03:00.000Z', 'New later chat')
+    );
+
+    const conversations = await repository.listConversations();
+    expect(conversations).toHaveLength(2);
+    expect(conversations.filter((entry) => entry.provisional)).toHaveLength(1);
+    expect(conversations.filter((entry) => !entry.provisional)).toHaveLength(1);
+    expect(conversations.find((entry) => entry.provisional)?.title).toBe('New later chat');
+  });
+
   it('keeps different tabs isolated', () => {
     expect(stableSourceSessionId('same-content-id', 77)).toBe('tab:77');
     expect(stableSourceSessionId('same-content-id', 78)).toBe('tab:78');
