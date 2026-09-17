@@ -123,8 +123,8 @@ function strongProviderTurnId(value: string): boolean {
   return !value.startsWith('dom:') && !/^conversation-turn-\d+$/i.test(value);
 }
 
-function normalizedRenderedText(value: string): string {
-  return value.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').trim();
+function normalizedRenderedText(value: string | null): string | null {
+  return value === null ? null : value.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').trim();
 }
 
 function renderedTurnSequenceMatches(
@@ -395,9 +395,11 @@ export class ArchiveRepository {
       });
     });
 
-    let removable = providerIdentityMatches.map(({ conversation }) => conversation);
-
-    if (!removable.length) {
+    let removable: ArchiveConversation[];
+    if (providerIdentityMatches.length > 1) return;
+    if (providerIdentityMatches.length === 1) {
+      removable = [providerIdentityMatches[0]!.conversation];
+    } else {
       const renderedSequenceMatches = eligible.filter(({ messages }) =>
         renderedTurnSequenceMatches(messages, turns)
       );
