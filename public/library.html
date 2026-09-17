@@ -3,208 +3,169 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>LLM Chat History</title>
-  <style>
-    :root {
-      color-scheme: light;
-      font-family: Roboto, Arial, sans-serif;
-      --primary: #6750a4;
-      --on-primary: #ffffff;
-      --surface: #fffbfe;
-      --surface-container: #f3edf7;
-      --surface-container-high: #ece6f0;
-      --on-surface: #1d1b20;
-      --on-surface-variant: #49454f;
-      --outline: #79747e;
-      --outline-variant: #cac4d0;
-      --error: #b3261e;
-      --tip: #e8def8;
-    }
-    :root[data-theme="dark"] {
-      color-scheme: dark;
-      --primary: #d0bcff; --on-primary: #381e72; --surface: #141218;
-      --surface-container: #211f26; --surface-container-high: #2b2930;
-      --on-surface: #e6e0e9; --on-surface-variant: #cac4d0;
-      --outline: #938f99; --outline-variant: #49454f; --error: #f2b8b5; --tip: #4a4458;
-    }
-    @media (prefers-color-scheme: dark) {
-      :root:not([data-theme="light"]):not([data-theme="dark"]) {
-        color-scheme: dark;
-        --primary: #d0bcff; --on-primary: #381e72; --surface: #141218;
-        --surface-container: #211f26; --surface-container-high: #2b2930;
-        --on-surface: #e6e0e9; --on-surface-variant: #cac4d0;
-        --outline: #938f99; --outline-variant: #49454f; --error: #f2b8b5; --tip: #4a4458;
-      }
-    }
-    * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; background: var(--surface); color: var(--on-surface); }
-    button, input, select { font: inherit; }
-    .app { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; min-height: 100vh; }
-    .sidebar { border-right: 1px solid var(--outline-variant); background: var(--surface-container); padding: 20px 14px; }
-    .brand { font-size: 20px; font-weight: 800; margin: 0 8px 4px; }
-    .brand-help { margin: 0 8px 16px; font-size: 12px; line-height: 1.45; color: var(--on-surface-variant); }
-    .search-wrap { position: relative; }
-    .search, .select, .text-field { width: 100%; min-height: 44px; border: 1px solid var(--outline); border-radius: 14px; padding: 0 14px; background: var(--surface); color: var(--on-surface); outline: none; }
-    .search { border-radius: 24px; padding: 0 72px 0 16px; }
-    .search:focus, .select:focus, .text-field:focus { border: 2px solid var(--primary); }
-    .shortcut { position: absolute; right: 10px; top: 9px; border: 1px solid var(--outline-variant); border-radius: 8px; padding: 3px 7px; font-size: 10px; color: var(--on-surface-variant); background: var(--surface-container); }
-    .small-help { margin: 6px 8px 0; font-size: 11px; line-height: 1.4; color: var(--on-surface-variant); }
-    .filter-block { margin-top: 12px; }
-    .filter-label { display: block; margin: 0 8px 5px; font-size: 11px; font-weight: 800; color: var(--on-surface-variant); letter-spacing: .02em; }
-    .view-tabs { display: flex; gap: 6px; margin: 10px 2px 4px; }
-    .view-tab { flex: 1; min-height: 36px; border: 1px solid var(--outline-variant); border-radius: 18px; background: transparent; color: var(--on-surface-variant); cursor: pointer; font-weight: 700; }
-    .view-tab.selected { background: var(--tip); border-color: transparent; color: var(--on-surface); }
-    .count { margin: 10px 10px 8px; font-size: 12px; color: var(--on-surface-variant); }
-    .list { display: grid; gap: 6px; }
-    .conversation { width: 100%; text-align: left; border: 0; border-radius: 14px; padding: 12px; background: transparent; color: inherit; cursor: pointer; }
-    .conversation:hover { background: var(--surface-container-high); }
-    .conversation.selected { background: var(--tip); color: var(--on-surface); }
-    .conversation-title { display: block; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .conversation-meta { display: block; margin-top: 4px; font-size: 12px; color: var(--on-surface-variant); }
-    .theme-card { margin-top: 14px; padding: 12px; border: 1px solid var(--outline-variant); border-radius: 14px; background: var(--surface); }
-    .theme-title { font-size: 12px; font-weight: 800; }
-    .theme-help { margin-top: 3px; font-size: 11px; line-height: 1.4; color: var(--on-surface-variant); }
-    .theme-buttons { display: flex; gap: 6px; margin-top: 8px; }
-    .theme-choice { flex: 1; min-height: 34px; border: 1px solid var(--outline); border-radius: 10px; background: var(--surface); color: var(--on-surface); cursor: pointer; font-weight: 700; }
-    .theme-choice.selected { background: var(--tip); border-color: var(--primary); }
-    main { min-width: 0; }
-    .topbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 24px; border-bottom: 1px solid var(--outline-variant); background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); }
-    .heading { min-width: 0; }
-    .heading h1 { margin: 0; font-size: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .heading p { margin: 4px 0 0; font-size: 12px; color: var(--on-surface-variant); line-height: 1.4; }
-    .action-block { display: grid; justify-items: end; gap: 6px; max-width: min(820px, 68vw); }
-    .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-    .button { min-height: 38px; border: 1px solid var(--outline); border-radius: 20px; padding: 0 14px; background: var(--surface); color: var(--on-surface); cursor: pointer; font-weight: 700; }
-    .button.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
-    .button.danger { color: var(--error); border-color: color-mix(in srgb, var(--error) 65%, var(--outline)); }
-    .button.danger-armed { background: var(--error); border-color: var(--error); color: var(--on-primary); }
-    .button:disabled, .select:disabled, .text-field:disabled { opacity: .45; cursor: default; }
-    .button:focus-visible, .view-tab:focus-visible, .theme-choice:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 45%, transparent); outline-offset: 2px; }
-    .library-status { margin: 0; min-height: 16px; font-size: 11px; color: var(--on-surface-variant); text-align: right; line-height: 1.35; overflow-wrap: anywhere; }
-    .library-status.error { color: var(--error); }
-    .organizer { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(150px, 1fr) minmax(220px, 1.4fr); gap: 12px; padding: 14px 24px; border-bottom: 1px solid var(--outline-variant); background: var(--surface-container); }
-    .organizer-field { min-width: 0; display: grid; gap: 6px; }
-    .organizer-label { font-size: 11px; font-weight: 800; color: var(--on-surface-variant); }
-    .organizer-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-    .organizer .button { min-height: 34px; padding: 0 11px; font-size: 12px; }
-    .tags-row { display: flex; gap: 6px; }
-    .tags-row .text-field { flex: 1; min-width: 0; }
-    .visually-hidden { position: fixed; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-    .transcript { max-width: 940px; margin: 0 auto; padding: 24px; }
-    .message { margin: 0 0 18px; padding: 16px; border-radius: 18px; background: var(--surface-container); }
-    .message.assistant { background: var(--surface); border: 1px solid var(--outline-variant); }
-    .role { font-size: 12px; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: .06em; }
-    .time { float: right; font-size: 11px; color: var(--on-surface-variant); }
-    .model-label { margin-top: 6px; font-size: 11px; color: var(--on-surface-variant); }
-    .content { margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; font-family: inherit; }
-    .partial { margin-top: 8px; font-size: 11px; color: var(--on-surface-variant); }
-    .empty { min-height: 55vh; display: grid; place-items: center; text-align: center; color: var(--on-surface-variant); padding: 24px; }
-    @media (max-width: 1000px) { .organizer { grid-template-columns: 1fr; } }
-    @media (max-width: 900px) {
-      .topbar { flex-direction: column; }
-      .action-block { justify-items: start; max-width: 100%; }
-      .actions { justify-content: flex-start; }
-      .library-status { text-align: left; }
-    }
-    @media (max-width: 760px) {
-      .app { grid-template-columns: 1fr; }
-      .sidebar { border-right: 0; border-bottom: 1px solid var(--outline-variant); }
-      .topbar { position: static; }
-      .organizer { padding: 14px; }
-    }
-  </style>
+  <meta name="color-scheme" content="light dark">
+  <title>LLM Chat History — Library</title>
+  <link rel="stylesheet" href="library.css">
 </head>
 <body>
   <div class="app">
-    <aside class="sidebar">
-      <div class="brand">LLM Chat History</div>
-      <p class="brand-help">Your ChatGPT chats, saved privately on this computer. Nothing is uploaded by this extension.</p>
-      <div class="search-wrap">
-        <input id="search" class="search" type="search" placeholder="Search your saved chats…" autocomplete="off" aria-label="Search your saved chats">
-        <span class="shortcut" aria-hidden="true">Ctrl K</span>
-      </div>
-      <p class="small-help">Type any word you remember. Power users: press Ctrl+K (or ⌘K on Mac) from anywhere on this page.</p>
-      <div class="filter-block">
-        <label class="filter-label" for="project-filter">Show chats from</label>
-        <select id="project-filter" class="select" disabled aria-label="Show chats from a group">
-          <option value="all">All groups</option>
-          <option value="unsorted">Not in a group</option>
-        </select>
-      </div>
-      <div class="view-tabs" aria-label="Which chats to show">
-        <button id="view-active" class="view-tab selected" type="button" aria-pressed="true">Current</button>
-        <button id="view-archived" class="view-tab" type="button" aria-pressed="false">Put away</button>
-      </div>
-      <div id="count" class="count">Loading your saved chats…</div>
-      <div id="conversation-list" class="list" aria-live="polite"></div>
-      <section class="theme-card" aria-label="Appearance">
-        <div class="theme-title">How should this page look?</div>
-        <div class="theme-help">Auto follows your computer. Pick Light or Dark if you want one look all the time.</div>
-        <div class="theme-buttons">
-          <button id="theme-system" class="theme-choice" type="button">Auto</button>
-          <button id="theme-light" class="theme-choice" type="button">Light</button>
-          <button id="theme-dark" class="theme-choice" type="button">Dark</button>
+    <aside class="sidebar" aria-label="Conversation library">
+      <header class="sidebar-header">
+        <div class="brand-block">
+          <h1 class="brand">LLM Chat History</h1>
+          <p class="brand-help">Your locally saved LLM conversations.</p>
         </div>
+        <span class="local-badge">Local</span>
+      </header>
+
+      <div class="sidebar-controls">
+        <div class="search-wrap">
+          <input
+            id="search"
+            class="search"
+            type="search"
+            placeholder="Search conversations, messages, and ideas…"
+            autocomplete="off"
+            aria-label="Search conversations, messages, and ideas"
+          >
+          <span class="shortcut" aria-hidden="true">Ctrl K</span>
+        </div>
+        <p class="small-help sidebar-search-help">Search titles and captured message text. Press Ctrl+K or ⌘K from anywhere.</p>
+
+        <div class="filter-block">
+          <label class="filter-label" for="project-filter">Project</label>
+          <select id="project-filter" class="select" disabled aria-label="Filter conversations by project">
+            <option value="all">All projects</option>
+            <option value="unsorted">Unsorted</option>
+          </select>
+        </div>
+
+        <div class="view-tabs" aria-label="Conversation status">
+          <button id="view-active" class="view-tab selected" type="button" aria-pressed="true">Library</button>
+          <button id="view-archived" class="view-tab" type="button" aria-pressed="false">Archived</button>
+        </div>
+      </div>
+
+      <section class="sidebar-list-wrap" aria-label="Saved conversations">
+        <div id="count" class="count">Loading your saved conversations…</div>
+        <div id="conversation-list" class="list" aria-live="polite"></div>
       </section>
+
+      <footer class="sidebar-footer">
+        <section class="privacy-card" aria-label="Privacy status">
+          <div class="privacy-title">Local &amp; private</div>
+          <p class="privacy-copy">Saved in this browser. The extension does not upload your conversation archive.</p>
+        </section>
+
+        <section class="theme-card" aria-label="Appearance">
+          <div class="theme-title">Appearance</div>
+          <div class="theme-help">Auto follows your system theme.</div>
+          <div class="theme-buttons">
+            <button id="theme-system" class="theme-choice" type="button">Auto</button>
+            <button id="theme-light" class="theme-choice" type="button">Light</button>
+            <button id="theme-dark" class="theme-choice" type="button">Dark</button>
+          </div>
+        </section>
+      </footer>
     </aside>
+
     <main>
       <header class="topbar">
-        <div class="heading">
-          <h1 id="title">Your saved chats</h1>
-          <p id="meta">Choose a chat on the left to read it.</p>
-        </div>
-        <div class="action-block">
-          <div class="actions">
-            <button id="rename-chat" class="button" type="button" disabled>Change name</button>
-            <button id="archive-chat" class="button" type="button" disabled>Put away</button>
-            <button id="delete-chat" class="button danger" type="button" disabled>Delete this copy</button>
-            <button id="import-json" class="button" type="button" disabled>Restore backup</button>
-            <button id="download-md" class="button primary" type="button" disabled>Save readable copy</button>
-            <button id="download-json" class="button" type="button" disabled>Download backup</button>
-            <input id="import-file" class="visually-hidden" type="file" accept="application/json,.json" aria-label="Choose a backup file to restore">
+        <div class="topbar-row">
+          <div class="breadcrumb" aria-label="Location">
+            <span>Workspace</span>
+            <span aria-hidden="true">›</span>
+            <strong>Library</strong>
           </div>
-          <p id="library-status" class="library-status" aria-live="polite"></p>
+          <span class="workspace-badge">Local workspace</span>
+        </div>
+
+        <div class="topbar-row">
+          <div class="heading">
+            <h1 id="title">Library</h1>
+            <p id="meta">Choose a conversation to read it.</p>
+          </div>
+
+          <div class="action-block">
+            <div class="actions" aria-label="Conversation actions">
+              <button id="rename-chat" class="button" type="button" disabled>Rename</button>
+              <button id="archive-chat" class="button" type="button" disabled>Archive</button>
+              <button id="delete-chat" class="button danger" type="button" disabled>Delete</button>
+              <button id="import-json" class="button" type="button" disabled>Restore backup</button>
+              <button id="download-md" class="button primary" type="button" disabled>Export Markdown</button>
+              <button id="download-json" class="button" type="button" disabled>Export JSON</button>
+              <input
+                id="import-file"
+                class="visually-hidden"
+                type="file"
+                accept="application/json,.json"
+                aria-label="Choose a backup file to restore"
+              >
+            </div>
+            <p id="library-status" class="library-status" aria-live="polite"></p>
+          </div>
         </div>
       </header>
-      <section class="organizer" aria-label="Keep this chat organized">
-        <div class="organizer-field">
-          <label class="organizer-label" for="project-select">Group</label>
-          <select id="project-select" class="select" disabled aria-label="Choose a group for this chat">
-            <option value="">Not in a group</option>
-          </select>
-          <div class="organizer-actions">
-            <button id="new-project" class="button" type="button" disabled>New group</button>
-            <button id="rename-project" class="button" type="button" disabled>Change group name</button>
-            <button id="delete-project" class="button danger" type="button" disabled>Delete group</button>
-          </div>
-          <p class="small-help" style="margin:0">Groups help you keep related chats together, such as “Work” or “Travel”.</p>
-        </div>
-        <div class="organizer-field">
-          <label class="organizer-label" for="folder-select">Folder inside this group</label>
-          <select id="folder-select" class="select" disabled aria-label="Choose a folder inside this group">
-            <option value="">No folder</option>
-          </select>
-          <div class="organizer-actions">
-            <button id="new-folder" class="button" type="button" disabled>New folder</button>
-            <button id="rename-folder" class="button" type="button" disabled>Change folder name</button>
-            <button id="delete-folder" class="button danger" type="button" disabled>Delete folder</button>
-          </div>
-          <p class="small-help" style="margin:0">Folders are optional. Use them only when a group starts getting crowded.</p>
-        </div>
-        <div class="organizer-field">
-          <label class="organizer-label" for="tags-input">Labels</label>
-          <div class="tags-row">
-            <input id="tags-input" class="text-field" type="text" disabled placeholder="work, research, follow-up" aria-label="Labels for this chat, separated by commas">
-            <button id="save-tags" class="button primary" type="button" disabled>Save labels</button>
-          </div>
-          <p class="small-help" style="margin:0">Add words that will help you find this chat later. Separate each label with a comma. They stay on this computer.</p>
-        </div>
-      </section>
-      <section id="transcript" class="transcript">
-        <div class="empty">Chats you record will show up here.</div>
+
+      <div class="organizer-shell">
+        <details class="organizer-panel">
+          <summary class="organizer-summary">
+            <span>Organize this conversation</span>
+            <span class="organizer-summary-copy">Project, folder, and tags</span>
+          </summary>
+
+          <section class="organizer" aria-label="Organize this conversation">
+            <div class="organizer-field">
+              <label class="organizer-label" for="project-select">Project</label>
+              <select id="project-select" class="select" disabled aria-label="Choose a project for this conversation">
+                <option value="">Unsorted</option>
+              </select>
+              <div class="organizer-actions">
+                <button id="new-project" class="button" type="button" disabled>New</button>
+                <button id="rename-project" class="button" type="button" disabled>Rename</button>
+                <button id="delete-project" class="button danger" type="button" disabled>Delete</button>
+              </div>
+              <p class="small-help">Use projects for larger areas of work or research.</p>
+            </div>
+
+            <div class="organizer-field">
+              <label class="organizer-label" for="folder-select">Folder</label>
+              <select id="folder-select" class="select" disabled aria-label="Choose a folder inside this project">
+                <option value="">No folder</option>
+              </select>
+              <div class="organizer-actions">
+                <button id="new-folder" class="button" type="button" disabled>New</button>
+                <button id="rename-folder" class="button" type="button" disabled>Rename</button>
+                <button id="delete-folder" class="button danger" type="button" disabled>Delete</button>
+              </div>
+              <p class="small-help">Folders are optional and stay within their project.</p>
+            </div>
+
+            <div class="organizer-field">
+              <label class="organizer-label" for="tags-input">Tags</label>
+              <div class="tags-row">
+                <input
+                  id="tags-input"
+                  class="text-field"
+                  type="text"
+                  disabled
+                  placeholder="research, follow-up, code"
+                  aria-label="Tags for this conversation, separated by commas"
+                >
+                <button id="save-tags" class="button primary" type="button" disabled>Save</button>
+              </div>
+              <p class="small-help">Use a few memorable words to make future search and filtering easier.</p>
+            </div>
+          </section>
+        </details>
+      </div>
+
+      <section id="transcript" class="transcript" aria-label="Conversation transcript">
+        <div class="empty">Your locally recorded conversations will appear here.</div>
       </section>
     </main>
   </div>
+
   <script src="library.js"></script>
 </body>
 </html>
