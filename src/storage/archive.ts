@@ -119,6 +119,10 @@ function mergeVisibleActivities(
   );
 }
 
+function strongProviderTurnId(value: string): boolean {
+  return !value.startsWith('dom:') && !/^conversation-turn-\d+$/i.test(value);
+}
+
 export class ArchiveRepository {
   constructor(private readonly db: IDBDatabase) {}
 
@@ -161,9 +165,6 @@ export class ArchiveRepository {
       );
 
       if (stableExisting) {
-        // A stable provider identity is authoritative. SPA navigation can move one
-        // tab between already-known conversations, so transfer the unique
-        // tab/session claim away from the previous owner before claiming it here.
         if (sessionOwner && sessionOwner.id !== stableExisting.id) {
           const releasedOwner = { ...sessionOwner };
           delete releasedOwner.provisionalKey;
@@ -174,10 +175,6 @@ export class ArchiveRepository {
         existing = sessionOwner;
         identified = true;
       } else {
-        // The tab can navigate directly to a stable conversation that has not been
-        // archived before. Release any older stable session owner before creating
-        // the new stable record. Staleness protection is intentionally limited to
-        // provisional observations below; provider conversation IDs are explicit.
         if (sessionOwner) {
           const releasedOwner = { ...sessionOwner };
           delete releasedOwner.provisionalKey;
@@ -191,10 +188,6 @@ export class ArchiveRepository {
       );
 
       if (existing && !existing.provisional) {
-        // A stable conversation keeps the tab/session claim after promotion so an
-        // older observation from the document being replaced cannot recreate the
-        // provisional archive. A genuinely newer provisional route releases the
-        // claim and starts the next local conversation in this tab.
         if (now <= existing.lastObservedAt) return staleResolution(existing);
         const releasedOwner = { ...existing };
         delete releasedOwner.provisionalKey;
@@ -223,9 +216,6 @@ export class ArchiveRepository {
 
       if (stableProviderKey) {
         conversation.providerKey = stableProviderKey;
-        // Keep the provisional key as the current tab/session ownership claim.
-        // This closes the reload race where an older provisional snapshot can
-        // arrive after stable identity has already been persisted.
         conversation.provisionalKey = provisionalKey;
         conversation.provisional = false;
       } else {
@@ -300,6 +290,95 @@ export class ArchiveRepository {
         })
       );
     }
+  }
+
+  private async removeFreshProvisionalDuplicatesMatchingTurns(
+    stableConversation: ArchiveConversation,
+    turns: readonly ProviderTurnObservation[]
+  ): Promise<void> {
+    const providerMessageIds = new Set<string>();
+    const providerTurnIds = new Set<string>();
+    for (const turn of turns) {
+      if (turn.providerMessageId) providerMessageIds.add(turn.providerMessageId);
+      if (strongProviderTurnId(turn.providerTurnId)) providerTurnIds.add(turn.providerTurnId);
+    }
+    if (!providerMessageIds.size && !providerTurnIds.size) return;
+
+    const conversationTransaction = this.db.transaction(STORES.conversations, 'readonly');
+    const conversations = await requestToPromise<ArchiveConversation[]>(
+      conversationTransaction.objectStore(STORES.conversations).getAll()
+    );
+    await transactionDone(conversationTransaction);
+
+    const candidates = conversations.filter((conversation) => {
+      if (
+        conversation.id === stableConversation.id ||
+        conversation.providerId !== stableConversation.providerId ||
+        !conversation.provisional ||
+        conversation.recordingState !== 'recording'
+      ) {
+        return false;
+      }
+      return !(
+        conversation.customTitle ||
+        conversation.archivedAt ||
+        conversation.projectId ||
+        conversation.folderId ||
+        conversation.tags?.length
+      );
+    });
+    if (!candidates.length) return;
+
+    const readTransaction = this.db.transaction([STORES.messages, STORES.events], 'readonly');
+    const [allMessages, allEvents] = await Promise.all([
+      requestToPromise<ArchiveMessage[]>(readTransaction.objectStore(STORES.messages).getAll()),
+      requestToPromise<ArchiveEvent[]>(readTransaction.objectStore(STORES.events).getAll())
+    ]);
+    await transactionDone(readTransaction);
+
+    const safeEventTypes = new Set<ArchiveEventType>([
+      'conversation-created',
+      'conversation-identified',
+      'title-changed',
+      'message-added',
+      'message-updated',
+      'message-finalized'
+    ]);
+
+    const removable = candidates.filter((conversation) => {
+      const messages = allMessages.filter((message) => message.conversationId === conversation.id);
+      if (!messages.length) return false;
+
+      const allMessagesMatch = messages.every((message) => {
+        if (message.providerMessageId && providerMessageIds.has(message.providerMessageId)) {
+          return true;
+        }
+        return strongProviderTurnId(message.providerTurnId) && providerTurnIds.has(message.providerTurnId);
+      });
+      if (!allMessagesMatch) return false;
+
+      const events = allEvents.filter((event) => event.conversationId === conversation.id);
+      return events.every((event) => safeEventTypes.has(event.type));
+    });
+    if (!removable.length) return;
+
+    const removableIds = new Set(removable.map((conversation) => conversation.id));
+    const writeTransaction = this.db.transaction(
+      [STORES.conversations, STORES.messages, STORES.events],
+      'readwrite'
+    );
+    const conversationStore = writeTransaction.objectStore(STORES.conversations);
+    const messageStore = writeTransaction.objectStore(STORES.messages);
+    const eventStore = writeTransaction.objectStore(STORES.events);
+
+    for (const conversation of removable) conversationStore.delete(conversation.id);
+    for (const message of allMessages) {
+      if (removableIds.has(message.conversationId)) messageStore.delete(message.id);
+    }
+    for (const event of allEvents) {
+      if (event.conversationId && removableIds.has(event.conversationId)) eventStore.delete(event.id);
+    }
+    await transactionDone(writeTransaction);
   }
 
   private async persistConversationObservation(
@@ -424,9 +503,6 @@ export class ArchiveRepository {
       providerTurnId: turn.providerTurnId,
       providerMessageId: turn.providerMessageId,
       role: turn.role,
-      // DOM indexes are window-local under virtualization. Once a stable turn has
-      // entered the archive, never overwrite its canonical order with a later
-      // virtualized-window index. Snapshot reconciliation below updates ordering.
       orderHint: existing?.orderHint ?? turn.orderHint,
       plainText: turn.plainText,
       markdown: turn.markdown,
@@ -492,8 +568,6 @@ export class ArchiveRepository {
       observedStoredIds
     );
 
-    // Include any current record that was not represented by the prior canonical
-    // order or this visible snapshot. This is defensive for mixed old/new clients.
     for (const message of current) {
       if (!orderedIds.includes(message.id)) orderedIds.push(message.id);
     }
@@ -521,20 +595,20 @@ export class ArchiveRepository {
       sourceUrl: message.pageUrl,
       provisional: first.providerConversationId === null
     };
+    const observedAt = message.observation.type === 'turn-snapshot'
+      ? message.observation.observedAt
+      : first.observedAt;
     const resolution = await this.resolveConversation({
       identity,
       sourceSessionId: message.sourceSessionId,
-      observedAt: message.observation.type === 'turn-snapshot'
-        ? message.observation.observedAt
-        : first.observedAt
+      observedAt
     });
-    await this.recordResolutionEvents(
-      resolution,
-      message.observation.type === 'turn-snapshot'
-        ? message.observation.observedAt
-        : first.observedAt
-    );
+    await this.recordResolutionEvents(resolution, observedAt);
     if (resolution.stale) return resolution.conversation.recordingState;
+
+    if (identity.providerConversationId) {
+      await this.removeFreshProvisionalDuplicatesMatchingTurns(resolution.conversation, turns);
+    }
 
     const previous = await this.listMessages(resolution.conversation.id);
     let state: RecorderState = resolution.conversation.recordingState;
