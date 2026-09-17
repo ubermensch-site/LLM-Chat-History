@@ -16,6 +16,8 @@
     "release:preflight": "node scripts/release-evidence-preflight.mjs"
   },
   "devDependencies": {
+    "@fontsource/inter": "5.3.0",
+    "@fontsource/poppins": "5.3.0",
     "@types/chrome": "0.3.0",
     "esbuild": "0.28.2",
     "fake-indexeddb": "6.2.5",
