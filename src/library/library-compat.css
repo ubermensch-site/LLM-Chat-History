@@ -1,0 +1,16 @@
+:root {
+  /* Compatibility aliases for existing feature modules that inject styles at runtime. */
+  --primary: var(--accent);
+  --on-primary: #ffffff;
+  --surface-container-lowest: var(--surface-raised);
+  --surface-container-low: var(--surface-quiet);
+  --surface-container: var(--surface-quiet);
+  --surface-container-high: var(--surface-muted);
+  --surface-container-highest: var(--surface-muted);
+  --on-surface: var(--ink);
+  --on-surface-variant: var(--ink-muted);
+  --outline: var(--border-strong);
+  --outline-variant: var(--border);
+  --error: var(--danger);
+  --tip: var(--accent-soft);
+}
