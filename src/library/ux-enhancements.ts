@@ -167,6 +167,7 @@ function applyGrandmaProofCopy(root: ParentNode = document): void {
   ].join(', ');
   root.querySelectorAll(selector).forEach((element) => {
     if (insideTranscript(element)) return;
+    if (element.matches('button.conversation, button.search-result')) return;
     const current = element.textContent?.trim();
     if (!current) return;
     const replacement = COPY_REPLACEMENTS.get(current) ?? rewriteCountText(current);
