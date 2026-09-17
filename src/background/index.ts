@@ -17,7 +17,10 @@ import { CoalescingMirrorQueue } from '../filesystem/writer';
 import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
 import { provisionalConversationKey } from '../storage/ids';
-import { stableSourceSessionId } from './source-session';
+import {
+  isStaleProvisionalObservationForCurrentTab,
+  stableSourceSessionId
+} from './source-session';
 
 type PersistingRequest = Exclude<
   ContentToBackgroundRequest,
@@ -196,6 +199,19 @@ function mirrorIdentity(message: PersistingRequest): {
   };
 }
 
+function isStaleProviderObservationFromReplacedDocument(
+  message: PersistingRequest,
+  sender: chrome.runtime.MessageSender
+): boolean {
+  if (message.type !== 'LLMCH_PROVIDER_OBSERVATION') return false;
+  const identity = mirrorIdentity(message);
+  if (!identity) return false;
+  return isStaleProvisionalObservationForCurrentTab(
+    identity.providerConversationId,
+    sender.tab?.url
+  );
+}
+
 async function mirrorConversationIdForRequest(
   repository: ArchiveRepository,
   message: PersistingRequest
@@ -371,6 +387,12 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   }
 
   const persistenceMessage = withStableSourceSession(message, sender);
+
+  if (isStaleProviderObservationFromReplacedDocument(persistenceMessage, sender)) {
+    sendResponse({ ok: true, persistedAt: new Date().toISOString() } satisfies BackgroundAck);
+    return true;
+  }
+
   void getRepository()
     .then(async (repository) => {
       let recordingState;
