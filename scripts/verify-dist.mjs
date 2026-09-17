@@ -8,6 +8,7 @@ const requiredFiles = [
   'background.js',
   'content.js',
   'library.js',
+  'library.css',
   'library.html'
 ];
 
@@ -68,10 +69,17 @@ assert(
 );
 assert(contentScripts[0]?.all_frames !== true, 'Content script must not run in all frames');
 
-const libraryHtml = await readFile(resolve(dist, 'library.html'), 'utf8');
+const [libraryHtml, libraryCss] = await Promise.all([
+  readFile(resolve(dist, 'library.html'), 'utf8'),
+  readFile(resolve(dist, 'library.css'), 'utf8')
+]);
 assert(libraryHtml.includes('src="library.js"'), 'Library page is not wired to library.js');
+assert(libraryHtml.includes('href="library.css"'), 'Library page is not wired to library.css');
 assert(!/<script[^>]+src=["']https?:\/\//i.test(libraryHtml), 'Remote script found in library page');
+assert(!/<link[^>]+href=["']https?:\/\//i.test(libraryHtml), 'Remote stylesheet found in library page');
 assert(!/\son[a-z]+\s*=/i.test(libraryHtml), 'Inline event handler found in library page');
+assert(!/@import\s+(?:url\()?['"]?https?:\/\//i.test(libraryCss), 'Remote CSS import found in Library stylesheet');
+assert(!/url\(['"]?https?:\/\//i.test(libraryCss), 'Remote asset URL found in Library stylesheet');
 
 const scriptTags = [...libraryHtml.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)];
 assert(scriptTags.length === 1, `Expected exactly one packaged Library script, found ${scriptTags.length}`);
@@ -83,6 +91,10 @@ for (const [, attributes = '', body = ''] of scriptTags) {
 
 const distFiles = await collectFiles(dist);
 assert(!distFiles.some((file) => file.endsWith('.map')), `Release build contains source maps: ${distFiles.filter((file) => file.endsWith('.map')).join(', ')}`);
+assert(
+  distFiles.some((file) => file.startsWith('assets/') && file.endsWith('.woff2')),
+  'Expected self-hosted Library font assets in dist/assets'
+);
 
 const builtScriptEntries = await Promise.all(
   ['background.js', 'content.js', 'library.js'].map(async (file) => ({
@@ -116,4 +128,4 @@ for (const { file, source } of builtScriptEntries) {
 }
 
 console.log(`Verified installable extension bundle v${manifest.version}: ${distFiles.join(', ')}`);
-console.log('Verified v0.1 security/release invariants: version match, no source maps, minimal permissions, explicit CSP, no dynamic HTML/code sinks, no network APIs.');
+console.log('Verified v0.1 security/release invariants: version match, no source maps, minimal permissions, explicit CSP, locally bundled Library styles/fonts, no dynamic HTML/code sinks, no network APIs.');
