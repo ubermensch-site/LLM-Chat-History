@@ -216,6 +216,31 @@ async function isStaleProviderObservationFromReplacedDocument(
   return isStaleProvisionalObservationForCurrentTab(null, currentTabUrl);
 }
 
+async function isLateProvisionalTurnAgainstStableSessionOwner(
+  repository: ArchiveRepository,
+  message: PersistingRequest
+): Promise<boolean> {
+  if (message.type !== 'LLMCH_PROVIDER_OBSERVATION') return false;
+  if (
+    message.observation.type !== 'turn-snapshot' &&
+    message.observation.type !== 'turn-upsert'
+  ) {
+    return false;
+  }
+
+  const identity = mirrorIdentity(message);
+  if (!identity || identity.providerConversationId !== null) return false;
+
+  const provisionalKey = provisionalConversationKey(identity.providerId, identity.sourceSessionId);
+  const conversations = await repository.listConversations();
+  return conversations.some(
+    (conversation) =>
+      conversation.providerId === identity.providerId &&
+      conversation.provisionalKey === provisionalKey &&
+      !conversation.provisional
+  );
+}
+
 async function mirrorConversationIdForRequest(
   repository: ArchiveRepository,
   message: PersistingRequest
@@ -399,6 +424,11 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
     }
 
     const repository = await getRepository();
+    if (await isLateProvisionalTurnAgainstStableSessionOwner(repository, persistenceMessage)) {
+      sendResponse({ ok: true, persistedAt: new Date().toISOString() } satisfies BackgroundAck);
+      return;
+    }
+
     let recordingState;
     if (persistenceMessage.type === 'LLMCH_RECORDER_COMMAND') {
       recordingState = await repository.applyRecorderCommand(persistenceMessage);
