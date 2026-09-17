@@ -1,4 +1,6 @@
 import './library.css';
+import './library-compat.css';
+import './transcript-detail.css';
 import './index';
 import './search-navigation';
 import './checkpoints-ui';
@@ -10,3 +12,4 @@ import './privacy-notices';
 import './ux-enhancements';
 import './visible-activity-ui';
 import './conversation-card-ui';
+import './transcript-detail-ui';
