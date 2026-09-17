@@ -153,24 +153,37 @@ export class ArchiveRepository {
     let identified = false;
 
     if (stableProviderKey) {
-      existing = await requestToPromise<ArchiveConversation | undefined>(
+      const stableExisting = await requestToPromise<ArchiveConversation | undefined>(
         store.index(INDEXES.conversations.providerKey).get(stableProviderKey)
       );
+      const sessionOwner = await requestToPromise<ArchiveConversation | undefined>(
+        store.index(INDEXES.conversations.provisionalKey).get(provisionalKey)
+      );
 
-      if (!existing) {
-        existing = await requestToPromise<ArchiveConversation | undefined>(
-          store.index(INDEXES.conversations.provisionalKey).get(provisionalKey)
-        );
-
-        if (existing && !existing.provisional && existing.providerKey !== stableProviderKey) {
-          if (now < existing.lastObservedAt) return staleResolution(existing);
-          const releasedOwner = { ...existing };
+      if (stableExisting) {
+        // A stable provider identity is authoritative. SPA navigation can move one
+        // tab between already-known conversations, so transfer the unique
+        // tab/session claim away from the previous owner before claiming it here.
+        if (sessionOwner && sessionOwner.id !== stableExisting.id) {
+          const releasedOwner = { ...sessionOwner };
           delete releasedOwner.provisionalKey;
           store.put(releasedOwner);
-          existing = undefined;
-        } else {
-          identified = Boolean(existing?.provisional);
         }
+        existing = stableExisting;
+      } else if (sessionOwner?.provisional) {
+        existing = sessionOwner;
+        identified = true;
+      } else {
+        // The tab can navigate directly to a stable conversation that has not been
+        // archived before. Release any older stable session owner before creating
+        // the new stable record. Staleness protection is intentionally limited to
+        // provisional observations below; provider conversation IDs are explicit.
+        if (sessionOwner) {
+          const releasedOwner = { ...sessionOwner };
+          delete releasedOwner.provisionalKey;
+          store.put(releasedOwner);
+        }
+        existing = undefined;
       }
     } else {
       existing = await requestToPromise<ArchiveConversation | undefined>(
