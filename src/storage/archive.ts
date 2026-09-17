@@ -123,6 +123,36 @@ function strongProviderTurnId(value: string): boolean {
   return !value.startsWith('dom:') && !/^conversation-turn-\d+$/i.test(value);
 }
 
+function normalizedRenderedText(value: string | null): string | null {
+  return value === null ? null : value.replace(/\r\n?/g, '\n').replace(/\u00a0/g, ' ').trim();
+}
+
+function renderedTurnSequenceMatches(
+  messages: readonly ArchiveMessage[],
+  turns: readonly ProviderTurnObservation[]
+): boolean {
+  if (turns.length < 2 || messages.length !== turns.length) return false;
+  if (turns.some((turn) => turn.partial) || messages.some((message) => message.partial)) return false;
+
+  const orderedMessages = [...messages].sort(
+    (a, b) => a.orderHint - b.orderHint || a.firstObservedAt.localeCompare(b.firstObservedAt)
+  );
+  const orderedTurns = [...turns].sort(
+    (a, b) => a.orderHint - b.orderHint || a.observedAt.localeCompare(b.observedAt)
+  );
+  const roles = new Set(orderedTurns.map((turn) => turn.role));
+  if (!roles.has('user') || !roles.has('assistant')) return false;
+
+  return orderedMessages.every((message, index) => {
+    const turn = orderedTurns[index]!;
+    return (
+      message.role === turn.role &&
+      normalizedRenderedText(message.plainText) === normalizedRenderedText(turn.plainText) &&
+      normalizedRenderedText(message.markdown) === normalizedRenderedText(turn.markdown)
+    );
+  });
+}
+
 export class ArchiveRepository {
   constructor(private readonly db: IDBDatabase) {}
 
@@ -302,7 +332,6 @@ export class ArchiveRepository {
       if (turn.providerMessageId) providerMessageIds.add(turn.providerMessageId);
       if (strongProviderTurnId(turn.providerTurnId)) providerTurnIds.add(turn.providerTurnId);
     }
-    if (!providerMessageIds.size && !providerTurnIds.size) return;
 
     const conversationTransaction = this.db.transaction(STORES.conversations, 'readonly');
     const conversations = await requestToPromise<ArchiveConversation[]>(
@@ -345,22 +374,38 @@ export class ArchiveRepository {
       'message-finalized'
     ]);
 
-    const removable = candidates.filter((conversation) => {
+    const eligible = candidates.flatMap((conversation) => {
       const messages = allMessages.filter((message) => message.conversationId === conversation.id);
-      if (!messages.length) return false;
+      if (!messages.length) return [];
+      const events = allEvents.filter((event) => event.conversationId === conversation.id);
+      if (!events.every((event) => safeEventTypes.has(event.type))) return [];
+      return [{ conversation, messages }];
+    });
+    if (!eligible.length) return;
 
-      const allMessagesMatch = messages.every((message) => {
+    const providerIdentityMatches = eligible.filter(({ messages }) => {
+      if (messages.length !== turns.length || (!providerMessageIds.size && !providerTurnIds.size)) {
+        return false;
+      }
+      return messages.every((message) => {
         if (message.providerMessageId && providerMessageIds.has(message.providerMessageId)) {
           return true;
         }
         return strongProviderTurnId(message.providerTurnId) && providerTurnIds.has(message.providerTurnId);
       });
-      if (!allMessagesMatch) return false;
-
-      const events = allEvents.filter((event) => event.conversationId === conversation.id);
-      return events.every((event) => safeEventTypes.has(event.type));
     });
-    if (!removable.length) return;
+
+    let removable: ArchiveConversation[];
+    if (providerIdentityMatches.length > 1) return;
+    if (providerIdentityMatches.length === 1) {
+      removable = [providerIdentityMatches[0]!.conversation];
+    } else {
+      const renderedSequenceMatches = eligible.filter(({ messages }) =>
+        renderedTurnSequenceMatches(messages, turns)
+      );
+      if (renderedSequenceMatches.length !== 1) return;
+      removable = [renderedSequenceMatches[0]!.conversation];
+    }
 
     const removableIds = new Set(removable.map((conversation) => conversation.id));
     const writeTransaction = this.db.transaction(
