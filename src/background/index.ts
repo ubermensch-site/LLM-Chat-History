@@ -17,7 +17,10 @@ import { CoalescingMirrorQueue } from '../filesystem/writer';
 import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
 import { provisionalConversationKey } from '../storage/ids';
-import { stableSourceSessionId } from './source-session';
+import {
+  shouldRejectSupersededProvisional,
+  stableSourceSessionId
+} from './source-session';
 
 type PersistingRequest = Exclude<
   ContentToBackgroundRequest,
@@ -76,6 +79,29 @@ function isProviderObservationMessage(value: unknown): value is ContentToBackgro
   return (
     candidate.type === 'LLMCH_PROVIDER_OBSERVATION' &&
     Boolean(candidate.observation && typeof candidate.observation === 'object')
+  );
+}
+
+function providerConversationIdForObservation(message: ContentToBackgroundMessage): string | null | undefined {
+  const observation = message.observation;
+  if (observation.type === 'health') return undefined;
+  if (observation.type === 'conversation') return observation.identity.providerConversationId;
+  if (observation.type === 'turn-snapshot') {
+    return observation.turns[0]?.providerConversationId;
+  }
+  return observation.turn.providerConversationId;
+}
+
+function isSupersededProvisionalObservation(
+  message: ContentToBackgroundMessage,
+  sender: chrome.runtime.MessageSender
+): boolean {
+  const providerConversationId = providerConversationIdForObservation(message);
+  if (providerConversationId === undefined) return false;
+  return shouldRejectSupersededProvisional(
+    providerConversationId,
+    message.pageUrl,
+    sender.tab?.url
   );
 }
 
@@ -367,6 +393,14 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
         const text = error instanceof Error ? error.message : String(error);
         sendResponse({ ok: false, error: text } satisfies BackgroundAck);
       });
+    return true;
+  }
+
+  if (
+    message.type === 'LLMCH_PROVIDER_OBSERVATION' &&
+    isSupersededProvisionalObservation(message, sender)
+  ) {
+    sendResponse({ ok: true, persistedAt: new Date().toISOString() } satisfies BackgroundAck);
     return true;
   }
 
