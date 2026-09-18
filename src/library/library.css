@@ -870,7 +870,7 @@ main {
   .mobile-nav-button,
   .mobile-actions-toggle,
   .mobile-drawer-close {
-    min-height: 2.35rem;
+    min-height: 2.75rem;
     padding: 0 0.75rem;
     border: 1px solid var(--border);
     border-radius: 0.7rem;
@@ -1005,6 +1005,7 @@ main {
 
   .heading h1 {
     white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .mobile-actions-toggle {
@@ -1033,7 +1034,19 @@ main {
 
   .actions .button {
     width: 100%;
-    min-height: 2.55rem;
+    min-height: 2.75rem;
+  }
+
+  .view-tab,
+  .conversation,
+  .search-result {
+    min-height: 2.75rem;
+  }
+
+  .checkpoint-marker .checkpoint-mini {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    padding: 0.45rem 0.65rem;
   }
 
   .library-status {
@@ -1048,6 +1061,22 @@ main {
 
   .transcript {
     width: 100%;
+  }
+
+  .message {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .message .content {
+    max-width: 100%;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .empty {
+    min-height: 38vh;
+    padding: var(--space-4);
   }
 
   .message.user,
@@ -1096,7 +1125,15 @@ main {
   }
 
   .button {
-    min-height: 2.6rem;
+    min-height: 2.75rem;
+  }
+
+  .conversation {
+    padding: 0.85rem;
+  }
+
+  .conversation-preview {
+    -webkit-line-clamp: 3;
   }
 }
 
