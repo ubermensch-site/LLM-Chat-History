@@ -1,27 +1,14 @@
 # Live ChatGPT Validation — v0.1 Functional Release
 
-Status: Required before declaring the ChatGPT recorder production-ready.
+Status: Comprehensive manual reference and escalation checklist.
 
-This checklist validates the exact unpacked extension produced by CI against a real logged-in ChatGPT session. It remains separate from fixture/unit/stress coverage because provider DOM, SPA navigation, streaming, virtualization, historical lazy-loading and provider-visible work UI are external runtime dependencies.
+The default release path is now the automated Chromium Scenario 1–10 gate in `docs/qa/automated-release-qa.md` plus the short authenticated provider smoke test in `docs/qa/live-smoke.md`. This full checklist remains useful for first-release audits, provider migrations, or diagnosing a smoke-test failure because provider DOM, SPA navigation and transient provider UI are external runtime dependencies.
 
 ## Build under test
 
-Current pinned functional candidate:
+When this comprehensive checklist is invoked, use the exact unpacked artifact produced by the current green exact-main CI run. Record the commit SHA, CI run, artifact digest, Chrome/Edge version, OS, test date/time and tester.
 
-- commit: `b611c3936a8902246692d4cad2d128c6af971cdc`;
-- CI run: `35117220444`;
-- unpacked artifact: `llm-chat-history-unpacked-b611c3936a8902246692d4cad2d128c6af971cdc`;
-- unpacked artifact digest: `sha256:953650fb329547a9c30b607d9f6d12ac8e8b4f124333cb1fc2ae1fbe75bbf4fb`;
-- packaged artifact digest: `sha256:f854458c8e1812ef0f5b294df5a89a7b2834ffd4a7829c537b0c7e93019d57b8`.
-
-Also record:
-
-- Chrome/Edge version;
-- OS;
-- test date/time;
-- tester.
-
-Install using **Load unpacked** after extracting the exact CI artifact. Disable older LLM Chat History test builds so only one recorder is active.
+Install using **Load unpacked** after extracting that exact CI artifact. Disable older LLM Chat History test builds so only one recorder is active.
 
 If live QA causes a runtime code change, the changed behavior must be retested on the newly gated candidate before release approval.
 
@@ -301,4 +288,10 @@ If stable IDs disappear, record whether adapter health changes to degraded and w
 
 ## Release gate
 
-The ChatGPT recorder must not be called production-ready until scenarios 1–10 pass on a real logged-in browser session using the exact approved functional candidate. Unit/stress evidence supports this gate but cannot replace it.
+The normal release gate is:
+
+1. exact-main CI is green, including the deterministic Chromium Scenarios 1–10;
+2. the CI run publishes a passing `llm-chat-history/automated-release-qa` evidence artifact;
+3. the short authenticated ChatGPT smoke test passes on the exact runtime candidate.
+
+This comprehensive ten-scenario live checklist is no longer required for every routine release. Use it when the provider smoke test fails, when ChatGPT changes its DOM/runtime substantially, for provider migrations, or when a release needs a full manual audit.
