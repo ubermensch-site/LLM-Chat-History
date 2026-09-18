@@ -140,6 +140,11 @@ drawerClose.addEventListener('click', () => setDrawerOpen(false, true));
 scrim.addEventListener('click', () => setDrawerOpen(false, true));
 actionsToggle.addEventListener('click', () => setActionsOpen(!actionsOpen));
 
+const onFilterOpening = () => {
+  if (media.matches && drawerOpen) setDrawerOpen(false);
+};
+window.addEventListener('llm-library-filter-opening', onFilterOpening);
+
 sidebar.addEventListener('click', (event) => {
   if (!media.matches) return;
   const target = event.target;
@@ -222,6 +227,7 @@ window.addEventListener(
   'pagehide',
   () => {
     window.removeEventListener('keydown', onKeydown, true);
+    window.removeEventListener('llm-library-filter-opening', onFilterOpening);
     media.removeEventListener('change', onMediaChange);
   },
   { once: true }
