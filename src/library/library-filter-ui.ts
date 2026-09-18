@@ -345,6 +345,9 @@ function panelFocusableElements(): HTMLElement[] {
 }
 
 function setPanelOpen(open: boolean, restoreFocus = false): void {
+  if (open && media.matches) {
+    window.dispatchEvent(new Event('llm-library-filter-opening'));
+  }
   panelOpen = open;
   panel.hidden = !open;
   toggle.setAttribute('aria-expanded', String(open));
@@ -376,7 +379,13 @@ function setPanelOpen(open: boolean, restoreFocus = false): void {
     panel.style.removeProperty('width');
     panel.style.removeProperty('left');
     panel.style.removeProperty('top');
-    if (restoreFocus) toggle.focus();
+    if (restoreFocus) {
+      if (media.matches) {
+        document.querySelector<HTMLButtonElement>('.mobile-nav-button')?.focus();
+      } else {
+        toggle.focus();
+      }
+    }
   }
 }
 
