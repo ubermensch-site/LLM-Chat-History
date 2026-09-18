@@ -46,6 +46,14 @@ jobs:
       - name: Automated release scenarios
         run: xvfb-run -a npm run test:e2e
 
+      - name: Upload automated release QA evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-chat-history-automated-qa-${{ github.sha }}
+          path: release-qa-automated.json
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Package release ZIP
         run: npm run package:release
 
