@@ -214,7 +214,7 @@ function renderOrganizationControls(): void {
   tagsInput.disabled = !record;
   saveTagsButton.disabled = !record;
 
-  newProjectButton.disabled = false;
+  newProjectButton.disabled = !libraryReady;
   renameProjectButton.disabled = !selectedProject;
   deleteProjectButton.disabled = !selectedProject;
   newFolderButton.disabled = !selectedProject;
