@@ -1,5 +1,6 @@
 import { recordPerformanceSample } from '../performance/metrics';
 import { ChatGptAdapter } from '../providers/chatgpt/adapter';
+import { buildRecorderBoundarySnapshot } from './recorder-boundary';
 import {
   runHistoricalScrollHarvest,
   type HarvestViewport
@@ -107,8 +108,27 @@ async function openLibrary(): Promise<void> {
   applyAck(ack);
 }
 
+async function flushRenderedTurnsBeforeRecorderBoundary(command: RecorderCommand): Promise<void> {
+  const observedAt = new Date().toISOString();
+  const snapshot = buildRecorderBoundarySnapshot(
+    currentRecordingState,
+    command,
+    adapter.scanRenderedTurns(),
+    observedAt
+  );
+  if (!snapshot) return;
+
+  try {
+    await queueObservation(snapshot);
+  } catch {
+    // queueObservation already marks persistence unhealthy and logs the failure.
+    // Privacy-changing commands must still be allowed to proceed.
+  }
+}
+
 async function sendRecorderCommand(command: RecorderCommand): Promise<void> {
   await sendQueue;
+  await flushRenderedTurnsBeforeRecorderBoundary(command);
   const identity = adapter.getConversationIdentity();
   if (!identity) throw new Error('No supported conversation is active');
 
