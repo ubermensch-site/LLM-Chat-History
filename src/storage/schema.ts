@@ -6,7 +6,7 @@ import type {
 } from '../shared/types';
 
 export const ARCHIVE_DB_NAME = 'llm-chat-history';
-export const ARCHIVE_DB_VERSION = 2;
+export const ARCHIVE_DB_VERSION = 3;
 
 export const STORES = {
   conversations: 'conversations',
@@ -24,6 +24,7 @@ export const INDEXES = {
   messages: {
     conversationOrder: 'by_conversation_order',
     providerTurn: 'by_provider_turn',
+    providerMessage: 'by_provider_message',
     conversationUpdatedAt: 'by_conversation_updated_at'
   },
   events: {
