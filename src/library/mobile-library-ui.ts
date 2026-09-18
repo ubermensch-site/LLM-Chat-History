@@ -99,7 +99,11 @@ function syncResponsiveAccessibility(): void {
 }
 
 function setDrawerOpen(open: boolean, restoreFocus = false): void {
-  drawerOpen = media.matches && open;
+  const nextOpen = media.matches && open;
+  if (!nextOpen && media.matches && sidebar.contains(document.activeElement)) {
+    libraryToggle.focus();
+  }
+  drawerOpen = nextOpen;
   sidebar.classList.toggle('mobile-open', drawerOpen);
   scrim.classList.toggle('is-visible', drawerOpen);
   document.body.classList.toggle('mobile-library-open', drawerOpen);
@@ -115,7 +119,11 @@ function setDrawerOpen(open: boolean, restoreFocus = false): void {
 }
 
 function setActionsOpen(open: boolean, restoreFocus = false): void {
-  actionsOpen = media.matches && open;
+  const nextOpen = media.matches && open;
+  if (!nextOpen && media.matches && actionBlock.contains(document.activeElement)) {
+    actionsToggle.focus();
+  }
+  actionsOpen = nextOpen;
   actionBlock.classList.toggle('mobile-open', actionsOpen);
   actionsToggle.setAttribute('aria-expanded', String(actionsOpen));
   syncResponsiveAccessibility();
