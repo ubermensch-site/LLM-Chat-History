@@ -28,6 +28,12 @@ import type {
   ArchiveProjectFolder
 } from '../storage/schema';
 import {
+  filterAndSortLibraryRecords,
+  getLibraryFilters,
+  hasActiveLibraryFilters,
+  subscribeLibraryFilters
+} from './library-filter-state';
+import {
   getLibraryNavigationScope,
   navigationScopeProjectId,
   navigationScopeTitle,
@@ -149,7 +155,31 @@ const unsubscribeNavigation = subscribeLibraryNavigation((scope) => {
   if (libraryReady && !suppressNavigationReload) void loadRecords(null);
 });
 
+const unsubscribeFilters = subscribeLibraryFilters(() => {
+  if (!libraryReady) return;
+  resetDeleteConfirmation();
+  const inView = recordsInCurrentView();
+  if (!inView.some((record) => record.conversation.id === selectedConversationId)) {
+    selectedConversationId = inView[0]?.conversation.id ?? null;
+  }
+  renderConversationList();
+  const record = selectedRecord();
+  if (record && inView.some((entry) => entry.conversation.id === record.conversation.id)) {
+    renderTranscript(record);
+  } else {
+    const scopeTitle = navigationScopeTitle(getLibraryNavigationScope(), projects);
+    clearSelection(`No conversations match the current filters in ${scopeTitle}.`);
+  }
+});
+
 function recordsInCurrentView(): LibraryRecord[] {
+  return filterAndSortLibraryRecords(
+    records.filter(recordBelongsInCurrentView),
+    getLibraryFilters()
+  );
+}
+
+function recordsInNavigationScope(): LibraryRecord[] {
   return records.filter(recordBelongsInCurrentView);
 }
 
@@ -327,12 +357,16 @@ function conversationButton(record: LibraryRecord): HTMLButtonElement {
 }
 
 function renderConversationList(): void {
+  const scoped = recordsInNavigationScope();
   const inView = recordsInCurrentView();
   const visible = filterLibraryRecords(inView, searchInput.value);
   const scopeTitle = navigationScopeTitle(getLibraryNavigationScope(), projects);
+  const filtered = hasActiveLibraryFilters(getLibraryFilters());
   count.textContent = searchInput.value.trim()
-    ? `${visible.length} of ${inView.length} in ${scopeTitle}`
-    : `${inView.length} ${inView.length === 1 ? 'conversation' : 'conversations'} · ${scopeTitle}`;
+    ? `${visible.length} of ${inView.length} matching conversations · ${scopeTitle}`
+    : filtered
+      ? `${inView.length} of ${scoped.length} conversations · ${scopeTitle}`
+      : `${inView.length} ${inView.length === 1 ? 'conversation' : 'conversations'} · ${scopeTitle}`;
   list.replaceChildren(...visible.map(conversationButton));
 
   viewActive.classList.toggle('selected', !showingArchived);
@@ -741,6 +775,7 @@ window.addEventListener(
   'pagehide',
   () => {
     unsubscribeNavigation();
+    unsubscribeFilters();
   },
   { once: true }
 );
