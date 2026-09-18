@@ -14,6 +14,14 @@ const searchInput = element<HTMLInputElement>('#search');
 const actionBlock = element<HTMLElement>('.action-block');
 const heading = element<HTMLElement>('.heading');
 const media = window.matchMedia(MOBILE_BREAKPOINT);
+const focusableSelector = [
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'a[href]',
+  '[tabindex]:not([tabindex="-1"])'
+].join(', ');
 
 if (!sidebar.id) sidebar.id = 'mobile-library-panel';
 
@@ -42,6 +50,8 @@ document.body.prepend(appbar);
 const scrim = document.createElement('button');
 scrim.type = 'button';
 scrim.className = 'mobile-scrim';
+scrim.tabIndex = -1;
+scrim.setAttribute('aria-hidden', 'true');
 scrim.setAttribute('aria-label', 'Close saved conversations');
 document.body.append(scrim);
 
@@ -64,12 +74,37 @@ heading.after(actionsToggle);
 let drawerOpen = false;
 let actionsOpen = false;
 
+function drawerFocusableElements(): HTMLElement[] {
+  return [...sidebar.querySelectorAll<HTMLElement>(focusableSelector)].filter(
+    (element) => !element.hasAttribute('disabled') && element.getClientRects().length > 0
+  );
+}
+
+function syncResponsiveAccessibility(): void {
+  if (media.matches) {
+    sidebar.toggleAttribute('inert', !drawerOpen);
+    sidebar.setAttribute('aria-hidden', String(!drawerOpen));
+    sidebar.setAttribute('role', 'dialog');
+    if (drawerOpen) sidebar.setAttribute('aria-modal', 'true');
+    else sidebar.removeAttribute('aria-modal');
+
+    actionBlock.setAttribute('aria-hidden', String(!actionsOpen));
+  } else {
+    sidebar.removeAttribute('inert');
+    sidebar.removeAttribute('aria-hidden');
+    sidebar.removeAttribute('role');
+    sidebar.removeAttribute('aria-modal');
+    actionBlock.removeAttribute('aria-hidden');
+  }
+}
+
 function setDrawerOpen(open: boolean, restoreFocus = false): void {
   drawerOpen = media.matches && open;
   sidebar.classList.toggle('mobile-open', drawerOpen);
   scrim.classList.toggle('is-visible', drawerOpen);
   document.body.classList.toggle('mobile-library-open', drawerOpen);
   libraryToggle.setAttribute('aria-expanded', String(drawerOpen));
+  syncResponsiveAccessibility();
 
   if (drawerOpen) {
     setActionsOpen(false);
@@ -83,6 +118,7 @@ function setActionsOpen(open: boolean, restoreFocus = false): void {
   actionsOpen = media.matches && open;
   actionBlock.classList.toggle('mobile-open', actionsOpen);
   actionsToggle.setAttribute('aria-expanded', String(actionsOpen));
+  syncResponsiveAccessibility();
 
   if (actionsOpen) {
     setDrawerOpen(false);
@@ -100,7 +136,9 @@ sidebar.addEventListener('click', (event) => {
   if (!media.matches) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
-  if (target.closest('button.conversation, button.search-result')) {
+  if (target.closest('button.conversation')) {
+    window.setTimeout(() => setDrawerOpen(false, true), 0);
+  } else if (target.closest('button.search-result')) {
     window.setTimeout(() => setDrawerOpen(false), 0);
   }
 });
@@ -109,7 +147,7 @@ actionBlock.addEventListener('click', (event) => {
   if (!media.matches) return;
   const target = event.target;
   if (target instanceof HTMLButtonElement && !target.disabled) {
-    window.setTimeout(() => setActionsOpen(false), 0);
+    window.setTimeout(() => setActionsOpen(false, true), 0);
   }
 });
 
@@ -117,7 +155,29 @@ const onKeydown = (event: KeyboardEvent) => {
   if (!media.matches) return;
 
   if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'k') {
+    event.preventDefault();
     setDrawerOpen(true);
+    return;
+  }
+
+  if (drawerOpen && event.key === 'Tab') {
+    const focusable = drawerFocusableElements();
+    if (!focusable.length) {
+      event.preventDefault();
+      searchInput.focus();
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !sidebar.contains(active))) {
+      event.preventDefault();
+      last?.focus();
+    } else if (!event.shiftKey && (active === last || !sidebar.contains(active))) {
+      event.preventDefault();
+      first?.focus();
+    }
     return;
   }
 
@@ -134,12 +194,19 @@ const onKeydown = (event: KeyboardEvent) => {
 
 const onMediaChange = () => {
   if (!media.matches) {
-    setDrawerOpen(false);
-    setActionsOpen(false);
+    drawerOpen = false;
+    actionsOpen = false;
+    sidebar.classList.remove('mobile-open');
+    scrim.classList.remove('is-visible');
+    actionBlock.classList.remove('mobile-open');
+    libraryToggle.setAttribute('aria-expanded', 'false');
+    actionsToggle.setAttribute('aria-expanded', 'false');
     document.body.classList.remove('mobile-library-open');
   }
+  syncResponsiveAccessibility();
 };
 
+syncResponsiveAccessibility();
 window.addEventListener('keydown', onKeydown, true);
 media.addEventListener('change', onMediaChange);
 
