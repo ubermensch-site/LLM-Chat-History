@@ -287,6 +287,17 @@ async function recorderText(page) {
   }
 }
 
+async function waitForRecorderText(page, pattern, label, timeoutMs = 15000) {
+  const started = Date.now();
+  let last = '';
+  while (Date.now() - started < timeoutMs) {
+    last = await recorderText(page);
+    if (pattern.test(last)) return last;
+    await sleep(120);
+  }
+  throw new Error(`${label} did not appear in recorder text. Last text: ${last}`);
+}
+
 async function createHarness(name) {
   const userDataDir = await mkdtemp(join(tmpdir(), `llmch-${name}-`));
   const context = await chromium.launchPersistentContext(userDataDir, {
@@ -878,6 +889,17 @@ await runScenario('Scenario 9 — virtualized historical import and idempotency'
   await clickRecorderText(page, 'More options', 'SUMMARY');
   page.once('dialog', (dialog) => void dialog.accept());
   await clickRecorderText(page, 'Bring in older messages');
+  await waitForRecorderText(
+    page,
+    /Bringing in older messages/,
+    'historical import start'
+  );
+  await waitForRecorderText(
+    page,
+    /Done\. Found 6 unique messages/,
+    'historical import completion',
+    20000
+  );
 
   const archive = await waitForArchive(
     driverPage,
@@ -886,20 +908,39 @@ await runScenario('Scenario 9 — virtualized historical import and idempotency'
     20000
   );
   const conversation = archive.conversations[0];
-  assert.deepEqual(messagesFor(archive, conversation).map((message) => message.plainText), allTurns.map((turn) => turn.text));
+  assert.deepEqual(
+    messagesFor(archive, conversation).map((message) => message.plainText),
+    allTurns.map((turn) => turn.text)
+  );
 
-  const beforeSecondImport = archive.messages.length;
-  page.once('dialog', (dialog) => void dialog.accept());
-  await clickRecorderText(page, 'Bring in older messages');
-  await sleep(1800);
-  const afterSecondImport = await getArchive(driverPage);
-  assert.equal(afterSecondImport.messages.length, beforeSecondImport);
-
-  const bottomOffset = await page.evaluate(() => {
+  let bottomOffset = await page.evaluate(() => {
     const scroll = document.getElementById('scroll');
     return scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop;
   });
   assert.ok(bottomOffset <= 6, `historical import did not restore bottom position: ${bottomOffset}`);
+
+  const beforeSecondImport = archive.messages.length;
+  page.once('dialog', (dialog) => void dialog.accept());
+  await clickRecorderText(page, 'Bring in older messages');
+  await waitForRecorderText(
+    page,
+    /Bringing in older messages/,
+    'second historical import start'
+  );
+  await waitForRecorderText(
+    page,
+    /Done\. Found 6 unique messages/,
+    'second historical import completion',
+    20000
+  );
+  const afterSecondImport = await getArchive(driverPage);
+  assert.equal(afterSecondImport.messages.length, beforeSecondImport);
+
+  bottomOffset = await page.evaluate(() => {
+    const scroll = document.getElementById('scroll');
+    return scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop;
+  });
+  assert.ok(bottomOffset <= 6, `second historical import did not restore bottom position: ${bottomOffset}`);
 });
 
 await runScenario('Scenario 10 — Library search, export, appearance and keyboard', async (harness) => {
