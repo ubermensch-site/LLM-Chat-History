@@ -1,6 +1,7 @@
 import { exportFilename, renderJsonExport, renderMarkdownExport } from '../export/export';
 import { parseJsonArchiveExport } from '../import/json-import';
 import { ArchiveRepository } from '../storage/archive';
+import { listCheckpoints } from '../storage/checkpoints';
 import { conversationDisplayTitle } from '../storage/conversation';
 import { openArchiveDb } from '../storage/db';
 import { importArchiveBundle } from '../storage/import';
@@ -26,6 +27,15 @@ import type {
   ArchiveProject,
   ArchiveProjectFolder
 } from '../storage/schema';
+import {
+  getLibraryNavigationScope,
+  navigationScopeProjectId,
+  navigationScopeTitle,
+  recordMatchesNavigationScope,
+  setLibraryNavigationScope,
+  subscribeLibraryNavigation,
+  type LibraryNavigationScope
+} from './library-navigation-state';
 import { requestMirrorRefresh, requestMirrorRefreshes } from './mirror-refresh';
 import { filterLibraryRecords, type LibraryRecord } from './search';
 
@@ -92,6 +102,8 @@ let projects: ArchiveProject[] = [];
 let selectedConversationId: string | null = null;
 let showingArchived = false;
 let projectFilterId = 'all';
+let libraryReady = false;
+let suppressNavigationReload = false;
 let deleteDeadlineMs: number | null = null;
 let deleteResetTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -110,14 +122,32 @@ function folderById(
   return folderId ? project?.folders.find((folder) => folder.id === folderId) : undefined;
 }
 
-function recordBelongsInCurrentView(record: LibraryRecord): boolean {
-  if (showingArchived ? !record.conversation.archivedAt : Boolean(record.conversation.archivedAt)) {
-    return false;
-  }
-  if (projectFilterId === 'all') return true;
-  if (projectFilterId === 'unsorted') return !record.conversation.projectId;
-  return record.conversation.projectId === projectFilterId;
+function applyNavigationScope(scope: LibraryNavigationScope): void {
+  showingArchived = scope.kind === 'archived';
+  projectFilterId = navigationScopeProjectId(scope);
 }
+
+function setNavigationScopeWithoutReload(scope: LibraryNavigationScope): void {
+  suppressNavigationReload = true;
+  try {
+    const changed = setLibraryNavigationScope(scope);
+    if (!changed) applyNavigationScope(scope);
+  } finally {
+    suppressNavigationReload = false;
+  }
+}
+
+function recordBelongsInCurrentView(record: LibraryRecord): boolean {
+  return recordMatchesNavigationScope(record, getLibraryNavigationScope());
+}
+
+applyNavigationScope(getLibraryNavigationScope());
+
+const unsubscribeNavigation = subscribeLibraryNavigation((scope) => {
+  applyNavigationScope(scope);
+  resetDeleteConfirmation();
+  if (libraryReady && !suppressNavigationReload) void loadRecords(null);
+});
 
 function recordsInCurrentView(): LibraryRecord[] {
   return records.filter(recordBelongsInCurrentView);
@@ -260,7 +290,7 @@ function renderTranscript(record: LibraryRecord): void {
 
 function clearSelection(message: string): void {
   selectedConversationId = null;
-  title.textContent = showingArchived ? 'Archived conversations' : 'Local archive';
+  title.textContent = navigationScopeTitle(getLibraryNavigationScope(), projects);
   meta.textContent = message;
   renderManagementActions();
   setEmptyTranscript(message);
@@ -299,9 +329,10 @@ function conversationButton(record: LibraryRecord): HTMLButtonElement {
 function renderConversationList(): void {
   const inView = recordsInCurrentView();
   const visible = filterLibraryRecords(inView, searchInput.value);
+  const scopeTitle = navigationScopeTitle(getLibraryNavigationScope(), projects);
   count.textContent = searchInput.value.trim()
-    ? `${visible.length} of ${inView.length} ${showingArchived ? 'archived' : 'active'} conversations`
-    : `${inView.length} ${showingArchived ? 'archived' : 'active'} conversations`;
+    ? `${visible.length} of ${inView.length} in ${scopeTitle}`
+    : `${inView.length} ${inView.length === 1 ? 'conversation' : 'conversations'} · ${scopeTitle}`;
   list.replaceChildren(...visible.map(conversationButton));
 
   viewActive.classList.toggle('selected', !showingArchived);
@@ -314,10 +345,8 @@ function renderConversationList(): void {
     const empty = document.createElement('div');
     empty.className = 'count';
     empty.textContent = inView.length
-      ? 'No conversations in this view match the search.'
-      : showingArchived
-        ? 'No archived conversations in this project view.'
-        : 'No active conversations in this project view.';
+      ? `No conversations in ${scopeTitle} match this search.`
+      : `No conversations in ${scopeTitle}.`;
     list.append(empty);
   }
 }
@@ -330,12 +359,21 @@ async function loadRecords(preferredSelectionId: string | null = selectedConvers
   projects = loadedProjects;
   const projectMap = new Map(projects.map((project) => [project.id, project] as const));
   records = await Promise.all(
-    conversations.map(async (conversation) => ({
+    conversations.map(async (conversation): Promise<LibraryRecord> => ({
       conversation,
       messages: await repository.listMessages(conversation.id),
-      project: conversation.projectId ? projectMap.get(conversation.projectId) : undefined
+      project: conversation.projectId ? projectMap.get(conversation.projectId) : undefined,
+      checkpoints: await listCheckpoints(database, conversation.id)
     }))
   );
+
+  const scope = getLibraryNavigationScope();
+  if (scope.kind === 'project' || scope.kind === 'folder') {
+    const project = projects.find((entry) => entry.id === scope.projectId);
+    const folderExists =
+      scope.kind !== 'folder' || Boolean(project?.folders.some((folder) => folder.id === scope.folderId));
+    if (!project || !folderExists) setNavigationScopeWithoutReload({ kind: 'library' });
+  }
 
   const inView = recordsInCurrentView();
   const preferred = preferredSelectionId
@@ -347,12 +385,11 @@ async function loadRecords(preferredSelectionId: string | null = selectedConvers
 
   if (next) renderTranscript(next);
   else {
+    const scopeTitle = navigationScopeTitle(getLibraryNavigationScope(), projects);
     clearSelection(
-      showingArchived
-        ? 'Archived conversations in this project view will appear here.'
-        : records.length
-          ? 'No active conversations are available in this project view.'
-          : 'Your locally recorded conversations will appear here.'
+      records.length
+        ? `No conversations are available in ${scopeTitle}.`
+        : 'Your locally recorded conversations will appear here.'
     );
   }
 }
@@ -379,8 +416,9 @@ async function importSelectedFile(file: File): Promise<void> {
   try {
     const parsed = parseJsonArchiveExport(await file.text());
     const result = await importArchiveBundle(database, parsed);
-    showingArchived = Boolean(parsed.conversation.archivedAt);
-    projectFilterId = 'all';
+    setNavigationScopeWithoutReload(
+      parsed.conversation.archivedAt ? { kind: 'archived' } : { kind: 'library' }
+    );
     await loadRecords(result.conversationId);
     void requestMirrorRefresh(result.conversationId);
     const action = result.created ? 'Imported' : 'Merged';
@@ -604,25 +642,16 @@ function runAction(action: () => Promise<void>): void {
 
 searchInput.addEventListener('input', renderConversationList);
 projectFilter.addEventListener('change', () => {
-  projectFilterId = projectFilter.value;
-  const inView = recordsInCurrentView();
-  if (!inView.some((record) => record.conversation.id === selectedConversationId)) {
-    selectedConversationId = inView[0]?.conversation.id ?? null;
-  }
-  renderConversationList();
-  const record = selectedRecord();
-  if (record) renderTranscript(record);
-  else clearSelection('No conversations are available in this project view.');
+  const value = projectFilter.value;
+  if (value === 'all') setLibraryNavigationScope({ kind: 'library' });
+  else if (value === 'unsorted') setLibraryNavigationScope({ kind: 'unsorted' });
+  else setLibraryNavigationScope({ kind: 'project', projectId: value });
 });
 viewActive.addEventListener('click', () => {
-  showingArchived = false;
-  resetDeleteConfirmation();
-  void loadRecords(null);
+  setLibraryNavigationScope({ kind: 'library' });
 });
 viewArchived.addEventListener('click', () => {
-  showingArchived = true;
-  resetDeleteConfirmation();
-  void loadRecords(null);
+  setLibraryNavigationScope({ kind: 'archived' });
 });
 renameButton.addEventListener('click', () => runAction(renameSelectedConversation));
 archiveButton.addEventListener('click', () => runAction(toggleArchiveSelectedConversation));
@@ -668,6 +697,8 @@ void openArchiveDb()
   .then((db) => {
     database = db;
     repository = new ArchiveRepository(db);
+    libraryReady = true;
+    applyNavigationScope(getLibraryNavigationScope());
     importJson.disabled = false;
     projectFilter.disabled = false;
     newProjectButton.disabled = false;
@@ -698,3 +729,12 @@ void openArchiveDb()
       'The local archive could not be opened. Reload this page after resolving the storage error.'
     );
   });
+
+
+window.addEventListener(
+  'pagehide',
+  () => {
+    unsubscribeNavigation();
+  },
+  { once: true }
+);
