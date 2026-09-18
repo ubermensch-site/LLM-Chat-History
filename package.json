@@ -13,7 +13,9 @@
     "test:watch": "vitest",
     "verify:dist": "node scripts/verify-dist.mjs",
     "package:release": "node scripts/package-release.mjs",
-    "release:preflight": "node scripts/release-evidence-preflight.mjs"
+    "release:preflight": "node scripts/release-evidence-preflight.mjs",
+    "test:e2e": "node scripts/release-e2e.mjs",
+    "release:automated": "npm run typecheck && npm test && npm run build && npm run verify:dist && npm run test:e2e"
   },
   "devDependencies": {
     "@fontsource/inter": "5.3.0",
@@ -22,7 +24,8 @@
     "esbuild": "0.28.2",
     "fake-indexeddb": "6.2.5",
     "typescript": "7.0.2",
-    "vitest": "5.0.1"
+    "vitest": "5.0.1",
+    "@playwright/test": "1.63.0"
   },
   "engines": {
     "node": ">=24"

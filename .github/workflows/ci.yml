@@ -28,6 +28,9 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Install Chromium for release E2E
+        run: npx playwright install --with-deps chromium
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -39,6 +42,17 @@ jobs:
 
       - name: Verify extension bundle
         run: npm run verify:dist
+
+      - name: Automated release scenarios
+        run: xvfb-run -a npm run test:e2e
+
+      - name: Upload automated release QA evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: llm-chat-history-automated-qa-${{ github.sha }}
+          path: release-qa-automated.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Package release ZIP
         run: npm run package:release
