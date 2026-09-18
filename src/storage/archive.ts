@@ -57,6 +57,54 @@ function suppressedTurnEventId(conversationId: string, providerTurnId: string): 
   return `suppressed:${conversationId}:${encodeURIComponent(providerTurnId)}`;
 }
 
+function suppressedProviderMessageEventId(
+  conversationId: string,
+  providerMessageId: string
+): string {
+  return `suppressed-message:${conversationId}:${encodeURIComponent(providerMessageId)}`;
+}
+
+function suppressionEventIds(
+  conversationId: string,
+  turn: ProviderTurnObservation
+): string[] {
+  const ids = [suppressedTurnEventId(conversationId, turn.providerTurnId)];
+  if (turn.providerMessageId) {
+    ids.unshift(suppressedProviderMessageEventId(conversationId, turn.providerMessageId));
+  }
+  return ids;
+}
+
+async function archivedMessagesForObservedTurn(
+  store: IDBObjectStore,
+  conversationId: string,
+  turn: ProviderTurnObservation
+): Promise<ArchiveMessage[]> {
+  const byId = new Map<string, ArchiveMessage>();
+  const direct = await requestToPromise<ArchiveMessage | undefined>(
+    store.get(messageId(conversationId, turn.providerTurnId))
+  );
+  if (direct) byId.set(direct.id, direct);
+
+  if (turn.providerMessageId) {
+    const providerMatches = await requestToPromise<ArchiveMessage[]>(
+      store.index(INDEXES.messages.providerMessage).getAll(
+        IDBKeyRange.only([conversationId, turn.providerMessageId])
+      )
+    );
+    for (const candidate of providerMatches) {
+      if (candidate.providerId !== turn.providerId || candidate.role !== turn.role) continue;
+      byId.set(candidate.id, candidate);
+    }
+  }
+
+  return [...byId.values()].sort(
+    (a, b) =>
+      a.firstObservedAt.localeCompare(b.firstObservedAt) ||
+      a.id.localeCompare(b.id)
+  );
+}
+
 function recorderCommandEventId(requestId: string): string {
   return `recorder-command:${encodeURIComponent(requestId)}`;
 }
@@ -510,16 +558,17 @@ export class ArchiveRepository {
 
   private async isTurnSuppressed(
     conversationId: string,
-    providerTurnId: string
+    turn: ProviderTurnObservation
   ): Promise<boolean> {
     const transaction = this.db.transaction(STORES.events, 'readonly');
-    const event = await requestToPromise<ArchiveEvent | undefined>(
-      transaction.objectStore(STORES.events).get(
-        suppressedTurnEventId(conversationId, providerTurnId)
+    const store = transaction.objectStore(STORES.events);
+    const events = await Promise.all(
+      suppressionEventIds(conversationId, turn).map((id) =>
+        requestToPromise<ArchiveEvent | undefined>(store.get(id))
       )
     );
     await transactionDone(transaction);
-    return Boolean(event);
+    return events.some(Boolean);
   }
 
   private async suppressTurn(
@@ -527,21 +576,28 @@ export class ArchiveRepository {
     turn: ProviderTurnObservation,
     state: RecorderState
   ): Promise<void> {
-    const id = messageId(conversation.id, turn.providerTurnId);
     const contentHash = await sha256Hex(turnContentHashInput(turn));
-    const suppressionId = suppressedTurnEventId(conversation.id, turn.providerTurnId);
+    const suppressionIds = suppressionEventIds(conversation.id, turn);
+    const suppressionId = suppressionIds[0]!;
 
     const readTransaction = this.db.transaction([STORES.messages, STORES.events], 'readonly');
-    const existing = await requestToPromise<ArchiveMessage | undefined>(
-      readTransaction.objectStore(STORES.messages).get(id)
-    );
-    const alreadySuppressed = await requestToPromise<ArchiveEvent | undefined>(
-      readTransaction.objectStore(STORES.events).get(suppressionId)
-    );
+    const messageStore = readTransaction.objectStore(STORES.messages);
+    const eventStore = readTransaction.objectStore(STORES.events);
+    const [matchingMessages, suppressionEvents] = await Promise.all([
+      archivedMessagesForObservedTurn(messageStore, conversation.id, turn),
+      Promise.all(
+        suppressionIds.map((id) =>
+          requestToPromise<ArchiveEvent | undefined>(eventStore.get(id))
+        )
+      )
+    ]);
     await transactionDone(readTransaction);
 
+    const existing = matchingMessages[0];
     const activityChanged = observedActivityChanged(existing?.visibleActivities, turn.visibleActivities);
-    if (alreadySuppressed || (existing?.contentHash === contentHash && !activityChanged)) return;
+    if (suppressionEvents.some(Boolean) || (existing?.contentHash === contentHash && !activityChanged)) {
+      return;
+    }
 
     await this.appendEvent(
       archiveEvent(
@@ -550,6 +606,7 @@ export class ArchiveRepository {
         turn.observedAt,
         {
           providerTurnId: turn.providerTurnId,
+          providerMessageId: turn.providerMessageId,
           reason: state
         },
         suppressionId
@@ -584,11 +641,11 @@ export class ArchiveRepository {
       return state;
     }
 
-    if (await this.isTurnSuppressed(conversation.id, turn.providerTurnId)) {
+    if (await this.isTurnSuppressed(conversation.id, turn)) {
       return state;
     }
 
-    const id = messageId(conversation.id, turn.providerTurnId);
+    const fallbackId = messageId(conversation.id, turn.providerTurnId);
     const contentHash = await sha256Hex(turnContentHashInput(turn));
 
     const transaction = this.db.transaction(
@@ -599,25 +656,68 @@ export class ArchiveRepository {
     const conversations = transaction.objectStore(STORES.conversations);
     const events = transaction.objectStore(STORES.events);
 
-    const existing = await requestToPromise<ArchiveMessage | undefined>(messages.get(id));
+    const matchingMessages = await archivedMessagesForObservedTurn(
+      messages,
+      conversation.id,
+      turn
+    );
+    const existing = matchingMessages[0];
+    const duplicates = matchingMessages.slice(1);
+    const id = existing?.id ?? fallbackId;
     const isNew = !existing;
-    const activityChanged = observedActivityChanged(existing?.visibleActivities, turn.visibleActivities);
+
+    let priorVisibleActivities = existing?.visibleActivities ?? [];
+    for (const duplicate of duplicates) {
+      priorVisibleActivities = mergeVisibleActivities(
+        priorVisibleActivities,
+        duplicate.visibleActivities?.map((activity) => ({
+          providerActivityId: activity.providerActivityId,
+          kind: activity.kind,
+          text: activity.text,
+          orderHint: activity.orderHint,
+          observedAt: activity.lastObservedAt
+        }))
+      );
+    }
+
+    const activityChanged = observedActivityChanged(priorVisibleActivities, turn.visibleActivities);
     const contentChanged = Boolean(existing && (existing.contentHash !== contentHash || activityChanged));
     const finalized = Boolean(existing?.partial && !turn.partial);
-    const visibleActivities = mergeVisibleActivities(existing?.visibleActivities, turn.visibleActivities);
+    const visibleActivities = mergeVisibleActivities(priorVisibleActivities, turn.visibleActivities);
+    const duplicateIds = new Set(duplicates.map((duplicate) => duplicate.id));
+
+    if (duplicateIds.size) {
+      const conversationEvents = await requestToPromise<ArchiveEvent[]>(
+        events.index(INDEXES.events.conversationTime).getAll(
+          IDBKeyRange.bound([conversation.id, ''], [conversation.id, '\uffff'])
+        )
+      );
+      for (const event of conversationEvents) {
+        const eventMessageId = event.data.messageId;
+        if (typeof eventMessageId === 'string' && duplicateIds.has(eventMessageId)) {
+          events.delete(event.id);
+        }
+      }
+      for (const duplicate of duplicates) messages.delete(duplicate.id);
+    }
+
+    const inheritedModelLabel =
+      existing?.modelLabel ??
+      duplicates.find((duplicate) => duplicate.modelLabel)?.modelLabel ??
+      null;
 
     const record: ArchiveMessage = {
       id,
       conversationId: conversation.id,
       providerId: turn.providerId,
-      providerTurnId: turn.providerTurnId,
-      providerMessageId: turn.providerMessageId,
+      providerTurnId: existing?.providerTurnId ?? turn.providerTurnId,
+      providerMessageId: turn.providerMessageId ?? existing?.providerMessageId ?? null,
       role: turn.role,
       orderHint: existing?.orderHint ?? turn.orderHint,
       plainText: turn.plainText,
       markdown: turn.markdown,
       partial: turn.partial,
-      modelLabel: turn.modelLabel ?? existing?.modelLabel ?? null,
+      modelLabel: turn.modelLabel ?? inheritedModelLabel,
       ...(visibleActivities.length ? { visibleActivities } : {}),
       contentHash,
       firstObservedAt: existing?.firstObservedAt ?? turn.observedAt,
@@ -630,7 +730,10 @@ export class ArchiveRepository {
       ...conversation,
       updatedAt: turn.observedAt,
       lastObservedAt: turn.observedAt,
-      messageCount: conversation.messageCount + (isNew ? 1 : 0)
+      messageCount: Math.max(
+        0,
+        conversation.messageCount + (isNew ? 1 : 0) - duplicates.length
+      )
     } satisfies ArchiveConversation);
 
     if (isNew) {
@@ -670,8 +773,21 @@ export class ArchiveRepository {
   ): Promise<void> {
     const current = await this.listMessages(conversationId);
     const currentById = new Map(current.map((message) => [message.id, message] as const));
+    const currentByProviderMessageId = new Map(
+      current.flatMap((message) =>
+        message.providerMessageId
+          ? [[message.providerMessageId, message] as const]
+          : []
+      )
+    );
     const observedStoredIds = turns
-      .map((turn) => messageId(conversationId, turn.providerTurnId))
+      .map((turn) => {
+        if (turn.providerMessageId) {
+          const providerMatch = currentByProviderMessageId.get(turn.providerMessageId);
+          if (providerMatch?.role === turn.role) return providerMatch.id;
+        }
+        return messageId(conversationId, turn.providerTurnId);
+      })
       .filter((id) => currentById.has(id));
     const orderedIds = reconcileObservedTurnOrder(
       previous.map((message) => message.id),
