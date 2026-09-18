@@ -319,6 +319,12 @@ function renderChips(): void {
   toggleCount.textContent = String(activeCount);
   toggleCount.hidden = activeCount === 0;
   toggle.classList.toggle('has-filters', activeCount > 0);
+  toggle.setAttribute(
+    'aria-label',
+    activeCount
+      ? `Filters, ${activeCount} active ${activeCount === 1 ? 'filter' : 'filters'}`
+      : 'Filters'
+  );
   clearButton.disabled = activeCount === 0 && state.sort === 'relevance';
 }
 
@@ -332,8 +338,10 @@ function positionPanel(): void {
   const rect = toggle.getBoundingClientRect();
   const width = Math.min(360, Math.max(300, rect.width + 130));
   const left = Math.max(12, Math.min(window.innerWidth - width - 12, rect.left));
-  const top = Math.min(window.innerHeight - 24, rect.bottom + 8);
   panel.style.width = `${width}px`;
+  const panelHeight = Math.min(panel.offsetHeight || 480, window.innerHeight - 24);
+  const preferredTop = rect.bottom + 8;
+  const top = Math.max(12, Math.min(preferredTop, window.innerHeight - panelHeight - 12));
   panel.style.left = `${left}px`;
   panel.style.top = `${top}px`;
 }
