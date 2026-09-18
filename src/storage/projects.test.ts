@@ -95,7 +95,7 @@ afterEach(async () => {
   }
 });
 
-describe('archive organization schema v2', () => {
+describe('archive organization schema v3', () => {
   it('upgrades an existing v1 archive without rewriting its conversations', async () => {
     const name = `llm-chat-history-v1-upgrade-${crypto.randomUUID()}`;
     databases.push(name);
@@ -103,8 +103,13 @@ describe('archive organization schema v2', () => {
     await createLegacyV1(name, legacyConversation);
 
     const db = await openArchiveDb({ name, factory: indexedDB });
-    expect(db.version).toBe(2);
+    expect(db.version).toBe(3);
     expect([...db.objectStoreNames]).toContain(STORES.projects);
+    const messageTransaction = db.transaction(STORES.messages, 'readonly');
+    expect(
+      [...messageTransaction.objectStore(STORES.messages).indexNames]
+    ).toContain(INDEXES.messages.providerMessage);
+    await transactionDone(messageTransaction);
     expect(await getConversation(db, legacyConversation.id)).toEqual(legacyConversation);
     expect((await getConversation(db, legacyConversation.id))?.projectId).toBeUndefined();
     db.close();
