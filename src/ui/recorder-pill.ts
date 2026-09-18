@@ -199,7 +199,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     }
     .panel {
       width: min(368px, calc(100vw - 24px));
-      max-height: min(640px, calc(100vh - 32px));
+      max-height: min(640px, calc(100dvh - 32px));
       overflow: auto;
       margin-bottom: 8px;
       padding: 16px;
@@ -447,6 +447,15 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
       .action.library, .action.wide { grid-column: 1; }
       .move-help { display: none; }
       .small-button { padding: 0 7px; }
+    }
+    @media (pointer: coarse) {
+      .pill,
+      .action,
+      .small-button,
+      .theme-button {
+        min-height: 44px;
+      }
+      .small-button { padding-inline: 11px; }
     }
     @media (prefers-reduced-motion: reduce) {
       .pill::after { transition: none; }
@@ -878,6 +887,13 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     return clamped;
   };
 
+  const reclampAfterLayout = () => {
+    window.requestAnimationFrame(() => {
+      const position = clampCurrentPosition();
+      if (position) void writeRecorderPosition(position);
+    });
+  };
+
   const beginDrag = (event: PointerEvent, source: HTMLElement) => {
     if (event.button !== 0 || visibility === 'hidden') return;
     activeDragCleanup?.();
@@ -939,6 +955,14 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     }
     visibility = transitionRecorderVisibility(visibility, 'toggle');
     render();
+    if (visibility === 'expanded') reclampAfterLayout();
+  });
+
+  moreOptions.addEventListener('toggle', () => {
+    if (visibility === 'expanded') reclampAfterLayout();
+  });
+  technicalDetails.addEventListener('toggle', () => {
+    if (visibility === 'expanded') reclampAfterLayout();
   });
 
   minimize.addEventListener('click', () => {
