@@ -102,6 +102,17 @@ const builtScriptEntries = await Promise.all(
     source: await readFile(resolve(dist, file), 'utf8')
   }))
 );
+
+const contentScriptSource =
+  builtScriptEntries.find(({ file }) => file === 'content.js')?.source ?? '';
+assert(
+  contentScriptSource.includes('LLMCH Inter') && contentScriptSource.includes('LLMCH Poppins'),
+  'Recorder font families are not bundled into content.js'
+);
+assert(
+  /data:font\/woff2;base64,/i.test(contentScriptSource),
+  'Recorder fonts must be embedded in content.js rather than exposed as web resources'
+);
 assert(
   builtScriptEntries.every(({ source }) => !/https?:\/\/[^\s"']+\.js/i.test(source)),
   'Built extension appears to reference remotely hosted JavaScript'
@@ -128,4 +139,4 @@ for (const { file, source } of builtScriptEntries) {
 }
 
 console.log(`Verified installable extension bundle v${manifest.version}: ${distFiles.join(', ')}`);
-console.log('Verified v0.1 security/release invariants: version match, no source maps, minimal permissions, explicit CSP, locally bundled Library styles/fonts, no dynamic HTML/code sinks, no network APIs.');
+console.log('Verified v0.1 security/release invariants: version match, no source maps, minimal permissions, explicit CSP, locally bundled Library fonts plus inline recorder fonts, no web-accessible resources, no dynamic HTML/code sinks, no network APIs.');
