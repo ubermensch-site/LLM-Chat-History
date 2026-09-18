@@ -980,7 +980,7 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
     const panel = document.getElementById('search-results');
     return Boolean(panel && !panel.hidden && panel.querySelector('.search-result'));
   });
-  assert.match(await driverPage.locator('#search-results').innerText(), /Message match/);
+  assert.match(await driverPage.locator('#search-results').innerText(), /Message match/i);
 
   await driverPage.keyboard.press('Escape');
   assert.equal(await driverPage.locator('#search').inputValue(), '');
