@@ -170,7 +170,7 @@ describe('Scenario 4 provider message identity across SPA rerenders', () => {
     await repository.persistObservation(snapshot([user, assistant], '2026-09-18T09:10:20.412Z'));
 
     const [conversation] = await repository.listConversations();
-    const [storedUser, storedAssistant] = await repository.listMessages(conversation!.id);
+    const [, storedAssistant] = await repository.listMessages(conversation!.id);
 
     const duplicateId = `${conversation!.id}:turn:${encodeURIComponent('rerender-shell')}`;
     const tx = db.transaction([STORES.messages, STORES.conversations, STORES.events], 'readwrite');
@@ -225,7 +225,7 @@ describe('Scenario 4 provider message identity across SPA rerenders', () => {
       text: 'scenario 4 chat b',
       observedAt: '2026-09-18T09:16:30.000Z'
     });
-    await repository.persistObservation(snapshot([storedUser ? user : user, revisit], '2026-09-18T09:16:30.000Z'));
+    await repository.persistObservation(snapshot([user, revisit], '2026-09-18T09:16:30.000Z'));
 
     const [healedConversation] = await repository.listConversations();
     expect(healedConversation?.messageCount).toBe(2);
