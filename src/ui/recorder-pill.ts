@@ -103,98 +103,354 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     :host { all: initial; }
     * { box-sizing: border-box; }
     .wrap {
-      --primary: #6750a4;
-      --primary-strong: #4f378b;
-      --on-primary: #ffffff;
-      --surface: #fffbfe;
-      --surface-soft: #f3edf7;
-      --surface-strong: #e8def8;
-      --text: #1d1b20;
-      --muted: #625b71;
-      --outline: #79747e;
-      --outline-soft: #cac4d0;
-      --good: #2e7d32;
-      --warn: #9a6700;
-      --bad: #b3261e;
-      font-family: Roboto, Arial, sans-serif;
+      --accent: #2f6b55;
+      --accent-strong: #285a49;
+      --accent-soft: #e8f1ec;
+      --surface: #fffdf8;
+      --surface-raised: #ffffff;
+      --surface-soft: #f6f2e9;
+      --text: #23251f;
+      --muted: #6d7068;
+      --outline: #d9d6cc;
+      --outline-strong: #b9b6ab;
+      --good: #2f6b55;
+      --warn: #a36a18;
+      --bad: #a44339;
+      --shadow: 0 18px 48px rgba(38, 39, 34, .18), 0 3px 12px rgba(38, 39, 34, .08);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
       color-scheme: light;
+      font-size: 13px;
+      line-height: 1.45;
     }
     .wrap[data-theme="dark"] {
-      --primary: #d0bcff;
-      --primary-strong: #e8def8;
-      --on-primary: #381e72;
-      --surface: #141218;
-      --surface-soft: #211f26;
-      --surface-strong: #4a4458;
-      --text: #e6e0e9;
-      --muted: #cac4d0;
-      --outline: #938f99;
-      --outline-soft: #49454f;
-      --good: #81c784;
-      --warn: #ffcc80;
-      --bad: #f2b8b5;
+      --accent: #8fc7aa;
+      --accent-strong: #a9d6bf;
+      --accent-soft: #263b31;
+      --surface: #181a17;
+      --surface-raised: #20231f;
+      --surface-soft: #262a25;
+      --text: #f0f0ea;
+      --muted: #b3b6ae;
+      --outline: #3c413a;
+      --outline-strong: #5d645a;
+      --good: #8fc7aa;
+      --warn: #e3b267;
+      --bad: #ef9a91;
+      --shadow: 0 18px 50px rgba(0, 0, 0, .42), 0 3px 12px rgba(0, 0, 0, .3);
       color-scheme: dark;
     }
-    button { font: inherit; }
-    button:focus-visible, summary:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
-    .pill {
-      border: 1px solid var(--outline-soft); border-radius: 999px; min-height: 40px; padding: 0 14px;
-      background: var(--surface-strong); color: var(--text); box-shadow: 0 2px 10px rgba(0,0,0,.22);
-      cursor: grab; display: inline-flex; align-items: center; gap: 8px;
-      font-size: 13px; font-weight: 700; user-select: none; touch-action: none;
+    button, summary { font: inherit; }
+    button:focus-visible, summary:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--accent) 42%, transparent);
+      outline-offset: 2px;
     }
+    .pill {
+      min-height: 42px;
+      max-width: min(320px, calc(100vw - 24px));
+      padding: 0 13px;
+      border: 1px solid var(--outline);
+      border-radius: 999px;
+      background: var(--surface-raised);
+      color: var(--text);
+      box-shadow: 0 8px 28px rgba(38, 39, 34, .15), 0 2px 8px rgba(38, 39, 34, .08);
+      cursor: grab;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 750;
+      letter-spacing: -.01em;
+      user-select: none;
+      touch-action: none;
+      white-space: nowrap;
+    }
+    .pill:hover { border-color: var(--outline-strong); }
     .pill:active, .drag-handle:active { cursor: grabbing; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); flex: 0 0 auto; }
-    .dot.paused, .dot.degraded { background: var(--warn); }
-    .dot.stopped { background: var(--outline); }
-    .dot.error { background: var(--bad); }
+    .pill::after {
+      content: "⌄";
+      display: inline-block;
+      margin-left: 1px;
+      color: var(--muted);
+      font-size: 14px;
+      transform: translateY(-1px);
+      transition: transform .16s ease;
+    }
+    .pill[aria-expanded="true"]::after { transform: rotate(180deg) translateY(-1px); }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--good);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 14%, transparent);
+      flex: 0 0 auto;
+    }
+    .dot.paused, .dot.degraded {
+      background: var(--warn);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 14%, transparent);
+    }
+    .dot.stopped {
+      background: var(--outline-strong);
+      box-shadow: none;
+    }
+    .dot.error {
+      background: var(--bad);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 14%, transparent);
+    }
     .panel {
-      width: min(336px, calc(100vw - 24px)); margin-bottom: 8px; padding: 14px; border-radius: 18px;
-      background: var(--surface); color: var(--text); box-shadow: 0 6px 24px rgba(0,0,0,.26);
-      border: 1px solid var(--outline-soft);
+      width: min(368px, calc(100vw - 24px));
+      max-height: min(640px, calc(100vh - 32px));
+      overflow: auto;
+      margin-bottom: 8px;
+      padding: 16px;
+      border: 1px solid var(--outline);
+      border-radius: 20px;
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: var(--shadow);
+      scrollbar-width: thin;
     }
     .panel[hidden] { display: none; }
-    .header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-    .drag-handle { min-width: 0; flex: 1; cursor: grab; user-select: none; touch-action: none; }
-    .title { font-size: 15px; font-weight: 800; }
-    .move-help { margin-top: 2px; font-size: 10px; color: var(--muted); }
-    .header-actions { display: flex; gap: 4px; }
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .drag-handle {
+      min-width: 0;
+      flex: 1;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+    .title {
+      font-family: Poppins, Inter, ui-sans-serif, sans-serif;
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 700;
+      letter-spacing: -.02em;
+    }
+    .move-help {
+      margin-top: 3px;
+      font-size: 10px;
+      color: var(--muted);
+    }
+    .header-actions {
+      display: flex;
+      gap: 5px;
+      flex: 0 0 auto;
+    }
     .small-button {
-      border: 1px solid var(--outline-soft); background: transparent; color: var(--text);
-      border-radius: 999px; min-height: 30px; padding: 0 10px; cursor: pointer; font-size: 11px; font-weight: 700;
+      min-height: 30px;
+      padding: 0 9px;
+      border: 1px solid transparent;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
     }
-    .status-card, .storage, .history-status {
-      margin-top: 10px; padding: 10px 11px; border-radius: 12px; background: var(--surface-soft);
-      font-size: 12px; line-height: 1.45; color: var(--text);
+    .small-button:hover {
+      border-color: var(--outline);
+      background: var(--surface-soft);
+      color: var(--text);
     }
-    .status-card strong, .storage strong { display: block; margin-bottom: 2px; }
-    .storage.error, .history-status.error { border: 1px solid var(--bad); }
+    .status-card {
+      margin-top: 14px;
+      padding: 12px 13px;
+      border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--outline));
+      border-radius: 14px;
+      background: var(--accent-soft);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .status-card strong {
+      display: block;
+      margin-bottom: 3px;
+      font-family: Poppins, Inter, ui-sans-serif, sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: -.01em;
+    }
+    .storage {
+      margin-top: 8px;
+      padding: 0 2px;
+      color: var(--muted);
+      font-size: 10.5px;
+      line-height: 1.4;
+    }
+    .storage strong {
+      display: inline;
+      margin-right: 4px;
+      color: var(--text);
+      font-weight: 700;
+    }
+    .storage.error {
+      padding: 8px 10px;
+      border: 1px solid color-mix(in srgb, var(--bad) 55%, var(--outline));
+      border-radius: 10px;
+      color: var(--bad);
+    }
+    .history-status {
+      margin-top: 10px;
+      padding: 9px 10px;
+      border-radius: 10px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.42;
+    }
+    .history-status.error {
+      border: 1px solid color-mix(in srgb, var(--bad) 55%, var(--outline));
+      color: var(--bad);
+    }
     .history-status[hidden] { display: none; }
-    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
     .action {
-      border: 1px solid var(--outline); background: var(--surface); color: var(--text);
-      border-radius: 12px; min-height: 40px; padding: 7px 10px; cursor: pointer; font-weight: 700;
+      min-height: 42px;
+      padding: 7px 10px;
+      border: 1px solid var(--outline);
+      border-radius: 11px;
+      background: var(--surface-raised);
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 700;
       line-height: 1.2;
     }
-    .action.primary { background: var(--primary); border-color: var(--primary); color: var(--on-primary); }
-    .action.danger { color: var(--bad); border-color: var(--bad); }
-    .action.confirm { background: var(--bad); border-color: var(--bad); color: #fff; }
-    .action.wide { grid-column: 1 / -1; }
-    .action:disabled { opacity: .52; cursor: default; }
-    .helper { margin-top: 10px; font-size: 11px; line-height: 1.45; color: var(--muted); }
-    .appearance { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--outline-soft); }
-    .appearance-title { font-size: 12px; font-weight: 800; }
-    .appearance-help { margin-top: 2px; font-size: 11px; line-height: 1.35; color: var(--muted); }
-    .theme-buttons { display: flex; gap: 6px; margin-top: 7px; }
-    .theme-button {
-      flex: 1; min-height: 34px; border: 1px solid var(--outline); border-radius: 10px;
-      background: var(--surface); color: var(--text); cursor: pointer; font-weight: 700;
+    .action:hover:not(:disabled) {
+      border-color: var(--outline-strong);
+      background: var(--surface-soft);
     }
-    .theme-button.selected { background: var(--surface-strong); border-color: var(--primary); }
-    details { margin-top: 10px; font-size: 11px; color: var(--muted); }
-    summary { cursor: pointer; font-weight: 700; }
-    .technical { margin-top: 6px; padding: 8px; background: var(--surface-soft); border-radius: 10px; overflow-wrap: anywhere; }
+    .action.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: #fff;
+    }
+    .wrap[data-theme="dark"] .action.primary { color: #13251d; }
+    .action.primary:hover:not(:disabled) {
+      border-color: var(--accent-strong);
+      background: var(--accent-strong);
+    }
+    .action.library {
+      grid-column: 1 / -1;
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--outline));
+      color: var(--accent-strong);
+    }
+    .wrap[data-theme="dark"] .action.library { color: var(--accent); }
+    .action.danger {
+      color: var(--bad);
+      border-color: color-mix(in srgb, var(--bad) 55%, var(--outline));
+    }
+    .action.confirm {
+      background: var(--bad);
+      border-color: var(--bad);
+      color: #fff;
+    }
+    .action.wide { grid-column: 1 / -1; }
+    .action:disabled { opacity: .45; cursor: default; }
+    .helper {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 10.5px;
+      line-height: 1.45;
+    }
+    details.disclosure {
+      margin-top: 12px;
+      border-top: 1px solid var(--outline);
+      padding-top: 11px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    details.disclosure > summary {
+      list-style: none;
+      cursor: pointer;
+      color: var(--text);
+      font-weight: 750;
+    }
+    details.disclosure > summary::-webkit-details-marker { display: none; }
+    details.disclosure > summary::after {
+      content: "+";
+      float: right;
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 500;
+      line-height: 1;
+    }
+    details.disclosure[open] > summary::after { content: "−"; }
+    .advanced-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .appearance {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--outline);
+    }
+    .appearance-title {
+      color: var(--text);
+      font-size: 11px;
+      font-weight: 750;
+    }
+    .appearance-help {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.4;
+    }
+    .theme-buttons {
+      display: flex;
+      gap: 5px;
+      margin-top: 7px;
+    }
+    .theme-button {
+      flex: 1;
+      min-height: 32px;
+      border: 1px solid var(--outline);
+      border-radius: 9px;
+      background: var(--surface-raised);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .theme-button.selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+    }
+    .technical {
+      margin-top: 8px;
+      padding: 9px 10px;
+      border-radius: 9px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 9.5px;
+      line-height: 1.45;
+    }
+    .qa-action { margin-top: 8px; width: 100%; }
+    @media (max-width: 420px) {
+      .panel { padding: 14px; border-radius: 17px; }
+      .actions, .advanced-actions { grid-template-columns: 1fr; }
+      .action.library, .action.wide { grid-column: 1; }
+      .move-help { display: none; }
+      .small-button { padding: 0 7px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .pill::after { transition: none; }
+    }
   `;
 
   const wrap = document.createElement('div');
@@ -211,15 +467,15 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
   dragHandle.className = 'drag-handle';
   const title = document.createElement('div');
   title.className = 'title';
-  title.textContent = 'Chat saving';
+  title.textContent = 'LLM Chat History';
   const moveHelp = document.createElement('div');
   moveHelp.className = 'move-help';
-  moveHelp.textContent = 'Drag this area to move the recorder.';
+  moveHelp.textContent = 'Local recorder · Drag to move';
   dragHandle.append(title, moveHelp);
 
   const headerActions = document.createElement('div');
   headerActions.className = 'header-actions';
-  const minimize = button('Minimize', 'small-button');
+  const minimize = button('Collapse', 'small-button');
   minimize.setAttribute('aria-label', 'Make this recorder small. Saving will continue.');
   const hide = button('Hide', 'small-button');
   hide.setAttribute('aria-label', 'Hide this recorder. Saving will continue.');
@@ -253,23 +509,32 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     'Download a private test report with counts and saving status. It does not include your chat text.'
   );
   const stop = button('Stop saving', 'action danger');
-  const library = button('Open saved chats', 'action wide');
+  const library = button('Open saved chats', 'action library');
   library.setAttribute('aria-label', 'Open the chats saved on this computer.');
-  actions.append(primary, checkpoint, importHistory, qaReport, stop, library);
+  actions.append(primary, checkpoint, library);
+
+  const moreOptions = document.createElement('details');
+  moreOptions.className = 'disclosure';
+  const moreOptionsSummary = document.createElement('summary');
+  moreOptionsSummary.textContent = 'More options';
+  const advancedActions = document.createElement('div');
+  advancedActions.className = 'advanced-actions';
+  advancedActions.append(importHistory, stop);
+  moreOptions.append(moreOptionsSummary, advancedActions);
 
   const helper = document.createElement('div');
   helper.className = 'helper';
   helper.textContent =
-    'Moving, minimizing, or hiding this recorder does not stop saving. Use “Pause saving” for a private break, or “Stop saving” to turn saving off.';
+    'Collapsing, moving, or hiding this control does not stop recording. Pause for a private break; Stop keeps recording off until you start it again.';
 
   const appearance = document.createElement('div');
   appearance.className = 'appearance';
   const appearanceTitle = document.createElement('div');
   appearanceTitle.className = 'appearance-title';
-  appearanceTitle.textContent = 'How should this recorder look?';
+  appearanceTitle.textContent = 'Appearance';
   const appearanceHelp = document.createElement('div');
   appearanceHelp.className = 'appearance-help';
-  appearanceHelp.textContent = 'Auto follows your computer. Choose Light or Dark if you want to keep one look all the time.';
+  appearanceHelp.textContent = 'Auto follows your computer, or choose a fixed theme.';
   const themeButtons = document.createElement('div');
   themeButtons.className = 'theme-buttons';
   const systemTheme = button('Auto', 'theme-button');
@@ -278,12 +543,16 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
   themeButtons.append(systemTheme, lightTheme, darkTheme);
   appearance.append(appearanceTitle, appearanceHelp, themeButtons);
 
+  moreOptions.append(appearance);
+
   const technicalDetails = document.createElement('details');
+  technicalDetails.className = 'disclosure';
   const technicalSummary = document.createElement('summary');
-  technicalSummary.textContent = 'Troubleshooting details';
+  technicalSummary.textContent = 'Troubleshooting';
   const technical = document.createElement('div');
   technical.className = 'technical';
-  technicalDetails.append(technicalSummary, technical);
+  qaReport.className = 'action qa-action';
+  technicalDetails.append(technicalSummary, technical, qaReport);
 
   panel.append(
     header,
@@ -292,7 +561,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     historyStatus,
     actions,
     helper,
-    appearance,
+    moreOptions,
     technicalDetails
   );
 
@@ -342,7 +611,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     if (state.health === 'error' || state.recordingState === 'error') return 'Needs attention';
     if (state.recordingState === 'paused') return 'Paused';
     if (state.recordingState === 'stopped') return 'Stopped';
-    return state.health === 'degraded' ? 'Saving · check' : 'Saving';
+    return state.health === 'degraded' ? 'Recording · check' : 'Recording';
   };
 
   const statusExplanation = (): string => {
@@ -358,19 +627,19 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     if (state.health === 'degraded') {
       return 'Saving is still on, but ChatGPT changed something the recorder is watching. Check the details below.';
     }
-    return 'Saving is ON. New messages you can see in ChatGPT are being saved on this computer.';
+    return 'New visible ChatGPT messages are being recorded to your local archive.';
   };
 
   const storageExplanation = (): string => {
     if (state.storageHealth === 'error') {
-      return 'Could not save the latest change. Keep this tab open and check troubleshooting details.';
+      return 'Latest save was not confirmed. Keep this tab open and check Troubleshooting.';
     }
     if (state.storageHealth === 'unknown' || !state.lastSavedAt) {
-      return 'Waiting for the first confirmed save on this computer.';
+      return 'Waiting for the first confirmed local save.';
     }
     const date = new Date(state.lastSavedAt);
     const saved = Number.isNaN(date.getTime()) ? state.lastSavedAt : date.toLocaleTimeString();
-    return `Saved safely on this computer at ${saved}.`;
+    return `Saved locally at ${saved}.`;
   };
 
   const resetStopConfirmation = () => {
@@ -397,17 +666,17 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
 
     host.style.display = visibility === 'hidden' ? 'none' : 'block';
     dot.className = `dot ${visualState}`;
-    label.textContent = `${statusLabel()} · ${state.turnCount}`;
+    label.textContent = `${statusLabel()} · ${state.turnCount} ${state.turnCount === 1 ? 'turn' : 'turns'}`;
     pill.setAttribute(
       'aria-label',
-      `${statusLabel()}. ${state.turnCount} messages are currently visible to the recorder. Drag to move; click to open.`
+      `${statusLabel()}. ${state.turnCount} visible ${state.turnCount === 1 ? 'turn' : 'turns'}. Drag to move; click to open.`
     );
     panel.hidden = visibility !== 'expanded';
     pill.setAttribute('aria-expanded', String(visibility === 'expanded'));
 
     statusCard.replaceChildren();
     const statusStrong = document.createElement('strong');
-    statusStrong.textContent = `${statusLabel()} · ${state.turnCount} visible messages`;
+    statusStrong.textContent = `${statusLabel()} · ${state.turnCount} visible ${state.turnCount === 1 ? 'turn' : 'turns'}`;
     const statusText = document.createElement('span');
     statusText.textContent = statusExplanation();
     statusCard.append(statusStrong, statusText);
@@ -415,7 +684,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     storage.className = `storage${state.storageHealth === 'error' ? ' error' : ''}`;
     storage.replaceChildren();
     const storageStrong = document.createElement('strong');
-    storageStrong.textContent = 'Saved on this computer';
+    storageStrong.textContent = 'Local save';
     const storageText = document.createElement('span');
     storageText.textContent = storageExplanation();
     storage.append(storageStrong, storageText);
