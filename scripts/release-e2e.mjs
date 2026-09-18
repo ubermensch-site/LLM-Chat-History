@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +9,8 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const extensionPath = resolve(root, 'dist');
 const HOST_ID = 'llm-chat-history-recorder-host';
 const DB_NAME = 'llm-chat-history';
+const AUTOMATED_QA_SCHEMA = 'llm-chat-history/automated-release-qa';
+const automatedScenarioResults = [];
 
 function sleep(ms) {
   return new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
@@ -352,6 +354,13 @@ async function runScenario(name, fn) {
   const harness = await createHarness(name.replace(/\W+/g, '-').toLowerCase());
   try {
     await fn(harness);
+    const match = /^Scenario (\d+)/.exec(name);
+    assert.ok(match, `Scenario name must start with an id: ${name}`);
+    automatedScenarioResults.push({
+      id: Number(match[1]),
+      name: name.replace(/^Scenario \d+ — /, ''),
+      status: 'PASS'
+    });
     console.log('PASS');
   } catch (error) {
     console.log('FAIL');
@@ -1028,5 +1037,36 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   assert.equal(exported.messages[1].visibleActivities[0].text, 'Indexed fixture work');
 });
 
-console.log('\\nAutomated release scenarios PASS: 10/10 deterministic checks.');
+
+assert.deepEqual(
+  automatedScenarioResults.map((scenario) => scenario.id),
+  [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+  'Automated release scenarios must complete in canonical order'
+);
+
+const manifest = JSON.parse(await readFile(resolve(extensionPath, 'manifest.json'), 'utf8'));
+const commitSha = /^[0-9a-f]{40}$/.test(process.env.GITHUB_SHA ?? '')
+  ? process.env.GITHUB_SHA
+  : null;
+const evidence = {
+  schema: AUTOMATED_QA_SCHEMA,
+  schemaVersion: 1,
+  generatedAt: new Date().toISOString(),
+  commitSha,
+  extensionVersion: manifest.version,
+  providerFixture: 'chatgpt-deterministic-local',
+  browserEngine: 'chromium',
+  scenarioCount: automatedScenarioResults.length,
+  allScenariosPass: automatedScenarioResults.every((scenario) => scenario.status === 'PASS'),
+  liveProviderSmokeRequired: true,
+  scenarios: automatedScenarioResults
+};
+await writeFile(
+  resolve(root, 'release-qa-automated.json'),
+  `${JSON.stringify(evidence, null, 2)}\n`,
+  'utf8'
+);
+
+console.log('\nAutomated release scenarios PASS: 10/10 deterministic checks.');
+console.log('Evidence: release-qa-automated.json');
 console.log('A short authenticated ChatGPT smoke test is still required for provider-DOM compatibility before production release.');
