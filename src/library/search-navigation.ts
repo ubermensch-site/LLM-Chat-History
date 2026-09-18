@@ -5,6 +5,11 @@ import { openArchiveDb } from '../storage/db';
 import { listProjects } from '../storage/projects';
 import type { ArchiveProject } from '../storage/schema';
 import { searchLibraryRecords, type LibrarySearchResult } from './full-text-search';
+import {
+  getLibraryNavigationScope,
+  recordMatchesNavigationScope,
+  subscribeLibraryNavigation
+} from './library-navigation-state';
 import type { LibraryRecord } from './search';
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -45,22 +50,8 @@ document.head.append(style);
 let renderTimer: ReturnType<typeof setTimeout> | null = null;
 const dbPromise = openArchiveDb();
 
-function activeProjectId(): string {
-  return projectFilter.value;
-}
-
-function showingArchived(): boolean {
-  return viewArchived.getAttribute('aria-pressed') === 'true';
-}
-
 function belongsToCurrentFilters(record: LibraryRecord): boolean {
-  const archived = Boolean(record.conversation.archivedAt);
-  if (archived !== showingArchived()) return false;
-
-  const projectId = activeProjectId();
-  if (projectId === 'all') return true;
-  if (projectId === 'unsorted') return !record.conversation.projectId;
-  return record.conversation.projectId === projectId;
+  return recordMatchesNavigationScope(record, getLibraryNavigationScope());
 }
 
 async function loadRecords(): Promise<LibraryRecord[]> {
@@ -230,8 +221,20 @@ searchInput.addEventListener('input', () => scheduleRender(40));
 projectFilter.addEventListener('change', () => scheduleRender(0));
 byId<HTMLButtonElement>('view-active').addEventListener('click', () => scheduleRender(50));
 viewArchived.addEventListener('click', () => scheduleRender(50));
+const unsubscribeNavigation = subscribeLibraryNavigation(() => scheduleRender(0));
 
 const listObserver = new MutationObserver(() => {
   if (searchInput.value.trim()) scheduleRender(20);
 });
 listObserver.observe(list, { childList: true });
+
+
+window.addEventListener(
+  'pagehide',
+  () => {
+    unsubscribeNavigation();
+    listObserver.disconnect();
+    if (renderTimer) clearTimeout(renderTimer);
+  },
+  { once: true }
+);
