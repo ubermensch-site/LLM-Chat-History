@@ -15,11 +15,11 @@ function sleep(ms) {
 }
 
 function fixtureHtml(title = 'ChatGPT') {
-  return \`<!doctype html>
+  return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>\${title}</title>
+  <title>${title}</title>
   <style>
     html, body { margin: 0; min-height: 100%; font-family: sans-serif; }
     #scroll { height: 720px; overflow-y: auto; }
@@ -30,7 +30,7 @@ function fixtureHtml(title = 'ChatGPT') {
 <body>
   <div id="scroll"><main id="fixture-chat"></main></div>
 </body>
-</html>\`;
+</html>`;
 }
 
 async function renderConversation(page, {
@@ -41,10 +41,10 @@ async function renderConversation(page, {
   navigation = 'none'
 }) {
   await page.evaluate((input) => {
-    const route = input.conversationId ? \`/c/\${input.conversationId}\` : '/';
+    const route = input.conversationId ? `/c/${input.conversationId}` : '/';
     if (input.navigation === 'push') history.pushState({}, '', route);
     if (input.navigation === 'replace') history.replaceState({}, '', route);
-    document.title = input.title ? \`\${input.title} - ChatGPT\` : 'ChatGPT';
+    document.title = input.title ? `${input.title} - ChatGPT` : 'ChatGPT';
 
     const root = document.getElementById('fixture-chat');
     if (!root) throw new Error('Missing fixture-chat');
@@ -54,7 +54,7 @@ async function renderConversation(page, {
       const shell = document.createElement('section');
       shell.dataset.turn = turn.role;
       shell.dataset.turnId = turn.turnId;
-      shell.dataset.testid = \`conversation-turn-\${index}\`;
+      shell.dataset.testid = `conversation-turn-${index}`;
 
       const message = document.createElement('div');
       message.dataset.messageAuthorRole = turn.role;
@@ -69,7 +69,7 @@ async function renderConversation(page, {
         for (const [activityIndex, activity] of (turn.activities ?? []).entries()) {
           const activityNode = document.createElement('button');
           activityNode.type = 'button';
-          activityNode.dataset.testid = activity.testId ?? \`work-step-\${activityIndex}\`;
+          activityNode.dataset.testid = activity.testId ?? `work-step-${activityIndex}`;
           activityNode.textContent = activity.text;
           message.append(activityNode);
         }
@@ -122,7 +122,7 @@ async function getArchive(driverPage) {
       const transaction = db.transaction(storeName, 'readonly');
       const request = transaction.objectStore(storeName).getAll();
       request.onsuccess = () => resolveStore(request.result);
-      request.onerror = () => rejectStore(request.error ?? new Error(\`Failed reading \${storeName}\`));
+      request.onerror = () => rejectStore(request.error ?? new Error(`Failed reading ${storeName}`));
     });
 
     try {
@@ -146,7 +146,7 @@ async function waitForArchive(driverPage, predicate, label, timeoutMs = 12000) {
     if (predicate(last)) return last;
     await sleep(150);
   }
-  throw new Error(\`\${label} did not converge. Last archive: \${JSON.stringify(last)}\`);
+  throw new Error(`${label} did not converge. Last archive: ${JSON.stringify(last)}`);
 }
 
 function messagesFor(archive, conversation) {
@@ -238,7 +238,7 @@ async function shadowNode(page, predicate) {
 async function clickShadow(page, predicate, label) {
   const { node, session } = await shadowNode(page, predicate);
   try {
-    if (!node) throw new Error(\`Recorder control not found: \${label}\`);
+    if (!node) throw new Error(`Recorder control not found: ${label}`);
     const model = await session.send('DOM.getBoxModel', { backendNodeId: node.backendNodeId });
     const quad = model.model.content;
     const x = (quad[0] + quad[2] + quad[4] + quad[6]) / 4;
@@ -271,7 +271,7 @@ async function recorderControlDisabled(page, text) {
     (candidate) => candidate.nodeName === 'BUTTON' && nodeText(candidate).trim() === text
   );
   try {
-    if (!node) throw new Error(\`Recorder control not found: \${text}\`);
+    if (!node) throw new Error(`Recorder control not found: ${text}`);
     return Object.hasOwn(attrs(node), 'disabled');
   } finally {
     await session.detach();
@@ -288,13 +288,13 @@ async function recorderText(page) {
 }
 
 async function createHarness(name) {
-  const userDataDir = await mkdtemp(join(tmpdir(), \`llmch-\${name}-\`));
+  const userDataDir = await mkdtemp(join(tmpdir(), `llmch-${name}-`));
   const context = await chromium.launchPersistentContext(userDataDir, {
     headless: false,
     viewport: { width: 1280, height: 900 },
     args: [
-      \`--disable-extensions-except=\${extensionPath}\`,
-      \`--load-extension=\${extensionPath}\`
+      `--disable-extensions-except=${extensionPath}`,
+      `--load-extension=${extensionPath}`
     ]
   });
 
@@ -310,14 +310,14 @@ async function createHarness(name) {
 
   async function open(url = 'https://chatgpt.com/') {
     await page.goto(url, { waitUntil: 'domcontentloaded' });
-    await page.locator(\`#\${HOST_ID}\`).waitFor({ state: 'attached', timeout: 15000 });
+    await page.locator(`#${HOST_ID}`).waitFor({ state: 'attached', timeout: 15000 });
 
     const worker = context.serviceWorkers()[0] ??
       await context.waitForEvent('serviceworker', { timeout: 15000 });
     const extensionId = new URL(worker.url()).host;
 
     const driverPage = await context.newPage();
-    await driverPage.goto(\`chrome-extension://\${extensionId}/library.html\`, {
+    await driverPage.goto(`chrome-extension://${extensionId}/library.html`, {
       waitUntil: 'domcontentloaded'
     });
     await driverPage.waitForFunction(() => {
@@ -337,7 +337,7 @@ async function createHarness(name) {
 }
 
 async function runScenario(name, fn) {
-  process.stdout.write(\`• \${name} ... \`);
+  process.stdout.write(`• ${name} ... `);
   const harness = await createHarness(name.replace(/\W+/g, '-').toLowerCase());
   try {
     await fn(harness);
@@ -661,7 +661,7 @@ await runScenario('Scenario 6 — stop, persistence and explicit start', async (
   await sleep(450);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.locator(\`#\${HOST_ID}\`).waitFor({ state: 'attached', timeout: 15000 });
+  await page.locator(`#${HOST_ID}`).waitFor({ state: 'attached', timeout: 15000 });
   await renderConversation(page, {
     title: 'Stop persistence',
     conversationId: 'e2e-stop',
@@ -752,19 +752,19 @@ await runScenario('Scenario 7 — collapse, hide, restore and position persisten
     await chrome.storage.local.set({ 'llmch.recorderPosition': { x: 140, y: 160 } });
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.locator(\`#\${HOST_ID}\`).waitFor({ state: 'attached', timeout: 15000 });
+  await page.locator(`#${HOST_ID}`).waitFor({ state: 'attached', timeout: 15000 });
   await renderConversation(page, {
     title: 'Visibility semantics',
     conversationId: 'e2e-ui',
     turns
   });
   await sleep(500);
-  const position = await page.locator(\`#\${HOST_ID}\`).evaluate((host) => ({
+  const position = await page.locator(`#${HOST_ID}`).evaluate((host) => ({
     left: Number.parseFloat(host.style.left),
     top: Number.parseFloat(host.style.top)
   }));
-  assert.ok(Math.abs(position.left - 140) <= 2, \`expected recorder x≈140, got \${position.left}\`);
-  assert.ok(Math.abs(position.top - 160) <= 2, \`expected recorder y≈160, got \${position.top}\`);
+  assert.ok(Math.abs(position.left - 140) <= 2, `expected recorder x≈140, got ${position.left}`);
+  assert.ok(Math.abs(position.top - 160) <= 2, `expected recorder y≈160, got ${position.top}`);
 });
 
 await runScenario('Scenario 8 — refresh and MV3 extension recovery', async (harness) => {
@@ -784,7 +784,7 @@ await runScenario('Scenario 8 — refresh and MV3 extension recovery', async (ha
   await worker.evaluate(() => chrome.runtime.reload());
   await sleep(600);
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.locator(\`#\${HOST_ID}\`).waitFor({ state: 'attached', timeout: 15000 });
+  await page.locator(`#${HOST_ID}`).waitFor({ state: 'attached', timeout: 15000 });
   worker = harness.context.serviceWorkers()[0] ??
     await harness.context.waitForEvent('serviceworker', { timeout: 15000 });
 
@@ -885,7 +885,7 @@ await runScenario('Scenario 9 — virtualized historical import and idempotency'
     const scroll = document.getElementById('scroll');
     return scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop;
   });
-  assert.ok(bottomOffset <= 6, \`historical import did not restore bottom position: \${bottomOffset}\`);
+  assert.ok(bottomOffset <= 6, `historical import did not restore bottom position: ${bottomOffset}`);
 });
 
 await runScenario('Scenario 10 — Library search, export, appearance and keyboard', async (harness) => {
