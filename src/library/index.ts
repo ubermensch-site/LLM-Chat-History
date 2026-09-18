@@ -538,7 +538,7 @@ async function createProjectFromUi(): Promise<void> {
   if (record) {
     await assignConversationOrganization(database, record.conversation.id, project.id, null);
   }
-  projectFilterId = 'all';
+  setNavigationScopeWithoutReload({ kind: 'library' });
   await loadRecords(record?.conversation.id ?? null);
   if (record) void requestMirrorRefresh(record.conversation.id);
   setLibraryStatus(`Created project “${project.name}”.`);
@@ -570,7 +570,13 @@ async function deleteSelectedProjectFromUi(): Promise<void> {
     .filter((entry) => entry.conversation.projectId === project.id)
     .map((entry) => entry.conversation.id);
   await deleteProject(database, project.id);
-  if (projectFilterId === project.id) projectFilterId = 'all';
+  const scope = getLibraryNavigationScope();
+  if (
+    (scope.kind === 'project' || scope.kind === 'folder') &&
+    scope.projectId === project.id
+  ) {
+    setNavigationScopeWithoutReload({ kind: 'library' });
+  }
   await loadRecords(record?.conversation.id ?? null);
   requestMirrorRefreshes(affected);
   setLibraryStatus(`Deleted project “${project.name}”; its conversations are now Unsorted.`);
