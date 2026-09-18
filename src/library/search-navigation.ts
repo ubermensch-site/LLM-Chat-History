@@ -6,6 +6,12 @@ import { listProjects } from '../storage/projects';
 import type { ArchiveProject } from '../storage/schema';
 import { searchLibraryRecords, type LibrarySearchResult } from './full-text-search';
 import {
+  filterAndSortLibraryRecords,
+  getLibraryFilters,
+  subscribeLibraryFilters,
+  type LibrarySort
+} from './library-filter-state';
+import {
   getLibraryNavigationScope,
   recordMatchesNavigationScope,
   subscribeLibraryNavigation
@@ -52,6 +58,31 @@ const dbPromise = openArchiveDb();
 
 function belongsToCurrentFilters(record: LibraryRecord): boolean {
   return recordMatchesNavigationScope(record, getLibraryNavigationScope());
+}
+
+function sortSearchResults(
+  results: LibrarySearchResult[],
+  sort: LibrarySort
+): LibrarySearchResult[] {
+  if (sort === 'relevance') return results;
+  return [...results].sort((a, b) => {
+    if (sort === 'oldest') {
+      return (
+        a.updatedAt.localeCompare(b.updatedAt) ||
+        a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+      );
+    }
+    if (sort === 'title') {
+      return (
+        a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }) ||
+        b.updatedAt.localeCompare(a.updatedAt)
+      );
+    }
+    return (
+      b.updatedAt.localeCompare(a.updatedAt) ||
+      a.title.localeCompare(b.title, undefined, { sensitivity: 'base' })
+    );
+  });
 }
 
 async function loadRecords(): Promise<LibraryRecord[]> {
@@ -177,9 +208,13 @@ async function renderSearchResults(): Promise<void> {
   }
 
   try {
-    const records = (await loadRecords()).filter(belongsToCurrentFilters);
+    const filters = getLibraryFilters();
+    const records = filterAndSortLibraryRecords(
+      (await loadRecords()).filter(belongsToCurrentFilters),
+      filters
+    );
     const searchStartedAt = performance.now();
-    const allResults = searchLibraryRecords(records, query);
+    const allResults = sortSearchResults(searchLibraryRecords(records, query), filters.sort);
     recordSearchProfile(performance.now() - searchStartedAt, allResults.length);
     const results = allResults.slice(0, 100);
     resultPanel.hidden = false;
@@ -190,14 +225,14 @@ async function renderSearchResults(): Promise<void> {
       empty.className = 'search-result-empty';
       empty.textContent = 'No matching conversations, checkpoints or turns in this view.';
       resultPanel.replaceChildren(empty);
-      count.textContent = `0 search results · ${records.length} conversations in this view`;
+      count.textContent = `0 search results · ${records.length} filtered conversations`;
       return;
     }
 
     resultPanel.replaceChildren(...results.map(resultButton));
     const messageCount = results.filter((result) => result.kind === 'message').length;
     const checkpointCount = results.filter((result) => result.kind === 'checkpoint').length;
-    count.textContent = `${results.length} search results · ${checkpointCount} checkpoints · ${messageCount} turn matches`;
+    count.textContent = `${results.length} search results · ${records.length} filtered conversations · ${checkpointCount} checkpoints · ${messageCount} turn matches`;
   } catch (error) {
     console.error('[LLM Chat History] full-text search failed', error);
     resultPanel.hidden = false;
@@ -222,6 +257,7 @@ projectFilter.addEventListener('change', () => scheduleRender(0));
 byId<HTMLButtonElement>('view-active').addEventListener('click', () => scheduleRender(50));
 viewArchived.addEventListener('click', () => scheduleRender(50));
 const unsubscribeNavigation = subscribeLibraryNavigation(() => scheduleRender(0));
+const unsubscribeFilters = subscribeLibraryFilters(() => scheduleRender(0));
 
 const listObserver = new MutationObserver(() => {
   if (searchInput.value.trim()) scheduleRender(20);
@@ -233,6 +269,7 @@ window.addEventListener(
   'pagehide',
   () => {
     unsubscribeNavigation();
+    unsubscribeFilters();
     listObserver.disconnect();
     if (renderTimer) clearTimeout(renderTimer);
   },
