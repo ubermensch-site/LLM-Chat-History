@@ -767,9 +767,9 @@ await runScenario('Scenario 7 — collapse, hide, restore and position persisten
   assert.ok(Math.abs(position.top - 160) <= 2, `expected recorder y≈160, got ${position.top}`);
 });
 
-await runScenario('Scenario 8 — refresh and MV3 extension recovery', async (harness) => {
-  let opened = await harness.open('https://chatgpt.com/c/e2e-recovery');
-  let { page, driverPage, worker } = opened;
+await runScenario('Scenario 8 — refresh and MV3 worker recovery', async (harness) => {
+  const opened = await harness.open('https://chatgpt.com/c/e2e-recovery');
+  const { page, driverPage, extensionId } = opened;
   const baseline = [
     userTurn('r-u1', 'recovery baseline'),
     assistantTurn('r-a1', 'r-m1', 'recovery baseline')
@@ -781,12 +781,26 @@ await runScenario('Scenario 8 — refresh and MV3 extension recovery', async (ha
   });
   await waitForArchive(driverPage, (value) => value.messages.length === 2, 'recovery baseline');
 
-  await worker.evaluate(() => chrome.runtime.reload());
-  await sleep(600);
+  // Terminate only the MV3 background service-worker target. This models normal
+  // worker suspension/restart without reloading or disabling the whole extension.
+  const cdp = await harness.context.newCDPSession(page);
+  try {
+    const { targetInfos } = await cdp.send('Target.getTargets');
+    const backgroundTarget = targetInfos.find(
+      (target) =>
+        target.type === 'service_worker' &&
+        target.url === `chrome-extension://${extensionId}/background.js`
+    );
+    assert.ok(backgroundTarget, 'background service-worker target was not found');
+    const closed = await cdp.send('Target.closeTarget', { targetId: backgroundTarget.targetId });
+    assert.equal(closed.success, true);
+  } finally {
+    await cdp.detach();
+  }
+
+  await sleep(350);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.locator(`#${HOST_ID}`).waitFor({ state: 'attached', timeout: 15000 });
-  worker = harness.context.serviceWorkers()[0] ??
-    await harness.context.waitForEvent('serviceworker', { timeout: 15000 });
 
   const after = [
     ...baseline,
