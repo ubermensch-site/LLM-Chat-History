@@ -53,9 +53,28 @@ function migrateToV2(db: IDBDatabase): void {
   projects.createIndex(INDEXES.projects.name, 'name', { unique: false });
 }
 
-export function applyArchiveMigrations(db: IDBDatabase, oldVersion: number): void {
+function migrateToV3(db: IDBDatabase, transaction: IDBTransaction): void {
+  const messages = transaction.objectStore(STORES.messages);
+  if (!messages.indexNames.contains(INDEXES.messages.providerMessage)) {
+    messages.createIndex(
+      INDEXES.messages.providerMessage,
+      ['conversationId', 'providerMessageId'],
+      { unique: false }
+    );
+  }
+}
+
+export function applyArchiveMigrations(
+  db: IDBDatabase,
+  oldVersion: number,
+  transaction?: IDBTransaction
+): void {
   if (oldVersion < 1) migrateToV1(db);
   if (oldVersion < 2) migrateToV2(db);
+  if (oldVersion < 3) {
+    if (!transaction) throw new Error('Archive v3 migration requires the upgrade transaction');
+    migrateToV3(db, transaction);
+  }
 }
 
 export function openArchiveDb(options: OpenArchiveDbOptions = {}): Promise<IDBDatabase> {
@@ -67,7 +86,7 @@ export function openArchiveDb(options: OpenArchiveDbOptions = {}): Promise<IDBDa
 
     request.onupgradeneeded = (event) => {
       const oldVersion = (event as IDBVersionChangeEvent).oldVersion;
-      applyArchiveMigrations(request.result, oldVersion);
+      applyArchiveMigrations(request.result, oldVersion, request.transaction ?? undefined);
     };
 
     request.onsuccess = () => resolve(request.result);
