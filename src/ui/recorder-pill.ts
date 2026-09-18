@@ -25,6 +25,10 @@ import {
   type ThemePreference
 } from './theme-preference';
 
+import inter400Url from '@fontsource/inter/files/inter-latin-400-normal.woff2?inline';
+import inter700Url from '@fontsource/inter/files/inter-latin-700-normal.woff2?inline';
+import poppins700Url from '@fontsource/poppins/files/poppins-latin-700-normal.woff2?inline';
+
 export type StorageHealthState = 'unknown' | 'healthy' | 'error';
 
 export interface HistoricalImportSummary {
@@ -63,6 +67,30 @@ const HOST_ID = 'llm-chat-history-recorder-host';
 const STOP_CONFIRMATION_MS = 5_000;
 const DRAG_THRESHOLD_PX = 4;
 
+const RECORDER_FONT_FACES = `
+  @font-face {
+    font-family: 'LLMCH Inter';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
+    src: url("${inter400Url}") format('woff2');
+  }
+  @font-face {
+    font-family: 'LLMCH Inter';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 700;
+    src: url("${inter700Url}") format('woff2');
+  }
+  @font-face {
+    font-family: 'LLMCH Poppins';
+    font-style: normal;
+    font-display: swap;
+    font-weight: 700;
+    src: url("${poppins700Url}") format('woff2');
+  }
+`;
+
 function readRecorderPosition(): Promise<RecorderPosition | null> {
   return new Promise((resolve) => {
     chrome.storage.local.get(RECORDER_POSITION_STORAGE_KEY, (result) => {
@@ -99,7 +127,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
 
   const shadow = host.attachShadow({ mode: 'closed' });
   const style = document.createElement('style');
-  style.textContent = `
+  style.textContent = `${RECORDER_FONT_FACES}
     :host { all: initial; }
     * { box-sizing: border-box; }
     .wrap {
@@ -117,7 +145,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
       --warn: #a36a18;
       --bad: #a44339;
       --shadow: 0 18px 48px rgba(38, 39, 34, .18), 0 3px 12px rgba(38, 39, 34, .08);
-      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: 'LLMCH Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--text);
       color-scheme: light;
       font-size: 13px;
@@ -225,7 +253,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
       touch-action: none;
     }
     .title {
-      font-family: Poppins, Inter, ui-sans-serif, sans-serif;
+      font-family: 'LLMCH Poppins', 'LLMCH Inter', ui-sans-serif, sans-serif;
       font-size: 15px;
       line-height: 1.25;
       font-weight: 700;
@@ -270,7 +298,7 @@ export function mountRecorderPill(options: RecorderPillOptions = {}): RecorderPi
     .status-card strong {
       display: block;
       margin-bottom: 3px;
-      font-family: Poppins, Inter, ui-sans-serif, sans-serif;
+      font-family: 'LLMCH Poppins', 'LLMCH Inter', ui-sans-serif, sans-serif;
       font-size: 13px;
       font-weight: 700;
       letter-spacing: -.01em;
