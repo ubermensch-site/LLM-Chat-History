@@ -1,3 +1,5 @@
+export {};
+
 const MOBILE_BREAKPOINT = '(max-width: 760px)';
 
 function element<T extends HTMLElement>(selector: string): T {
