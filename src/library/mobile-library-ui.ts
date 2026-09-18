@@ -120,6 +120,7 @@ const onKeydown = (event: KeyboardEvent) => {
   }
 
   if (event.key !== 'Escape') return;
+  if (event.target === searchInput && searchInput.value) return;
   if (drawerOpen) {
     event.preventDefault();
     setDrawerOpen(false, true);
@@ -137,13 +138,13 @@ const onMediaChange = () => {
   }
 };
 
-window.addEventListener('keydown', onKeydown);
+window.addEventListener('keydown', onKeydown, true);
 media.addEventListener('change', onMediaChange);
 
 window.addEventListener(
   'pagehide',
   () => {
-    window.removeEventListener('keydown', onKeydown);
+    window.removeEventListener('keydown', onKeydown, true);
     media.removeEventListener('change', onMediaChange);
   },
   { once: true }
