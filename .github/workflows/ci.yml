@@ -54,6 +54,7 @@ jobs:
             release-qa-automated.json
             release-qa-library-light.png
             release-qa-library-dark.png
+            release-qa-library-settings.png
           if-no-files-found: error
           retention-days: 30
 
