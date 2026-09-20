@@ -1,6 +1,7 @@
 import './library.css';
 import './library-compat.css';
 import './transcript-detail.css';
+import './premium-library-v3.css';
 import './index';
 import './search-navigation';
 import './checkpoints-ui';
@@ -16,3 +17,5 @@ import './transcript-detail-ui';
 import './library-navigation-ui';
 import './library-filter-ui';
 import './mobile-library-ui';
+
+import './premium-shell-ui';
