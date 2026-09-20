@@ -1035,8 +1035,22 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   await driverPage.locator('#search').fill('');
   await driverPage.locator('#search').dispatchEvent('input');
 
+  assert.equal(await driverPage.locator('.sidebar .mirror-card').count(), 0);
+  assert.equal(await driverPage.locator('.sidebar .diagnostics-card').count(), 0);
+  assert.equal(await driverPage.locator('.sidebar .performance-card').count(), 0);
+  assert.equal(await driverPage.locator('.sidebar .qa-evidence-card').count(), 0);
+
+  await driverPage.locator('#settings-open').click();
+  await driverPage.waitForFunction(() => document.getElementById('settings-drawer')?.classList.contains('is-open'));
+  assert.equal(await driverPage.locator('#settings-utility-content .mirror-card').count(), 1);
+  assert.equal(await driverPage.locator('#settings-utility-content .diagnostics-card').count(), 1);
+  assert.equal(await driverPage.locator('#settings-utility-content .performance-card').count(), 1);
+  assert.equal(await driverPage.locator('#settings-utility-content .qa-evidence-card').count(), 1);
+
   await driverPage.locator('#theme-dark').click();
   await driverPage.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  await driverPage.locator('#settings-close').click();
+  await driverPage.waitForFunction(() => !document.getElementById('settings-drawer')?.classList.contains('is-open'));
   await driverPage.reload({ waitUntil: 'domcontentloaded' });
   await driverPage.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
 
@@ -1050,6 +1064,7 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   assert.match(markdown, /Indexed fixture work/);
   assert.match(markdown, /GPT-5\.6/);
 
+  await driverPage.locator('details.action-menu > summary').click();
   const jsonDownloadPromise = driverPage.waitForEvent('download');
   await driverPage.locator('#download-json').click();
   const jsonDownload = await jsonDownloadPromise;
