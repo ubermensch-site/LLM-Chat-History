@@ -588,7 +588,6 @@ export class ArchiveRepository {
   ): Promise<void> {
     const contentHash = await sha256Hex(turnContentHashInput(turn));
     const suppressionIds = suppressionEventIds(conversation.id, turn);
-    const suppressionId = suppressionIds[0]!;
 
     const readTransaction = this.db.transaction([STORES.messages, STORES.events], 'readonly');
     const messageStore = readTransaction.objectStore(STORES.messages);
