@@ -1051,6 +1051,7 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   await driverPage.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   await driverPage.locator('#settings-close').click();
   await driverPage.waitForFunction(() => !document.getElementById('settings-drawer')?.classList.contains('is-open'));
+  await driverPage.waitForTimeout(260);
   await driverPage.screenshot({
     path: resolve(root, 'release-qa-library-light.png'),
     fullPage: true
@@ -1061,6 +1062,7 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   await driverPage.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
   await driverPage.locator('#settings-close').click();
   await driverPage.waitForFunction(() => !document.getElementById('settings-drawer')?.classList.contains('is-open'));
+  await driverPage.waitForTimeout(260);
   await driverPage.screenshot({
     path: resolve(root, 'release-qa-library-dark.png'),
     fullPage: true
