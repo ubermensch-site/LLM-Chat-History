@@ -14,8 +14,8 @@ import {
   type MirrorRuntimeStatus
 } from '../filesystem/status';
 
-const sidebar = document.querySelector<HTMLElement>('.sidebar');
-if (!sidebar) throw new Error('Missing Library sidebar for filesystem connection controls');
+const sidebar = document.querySelector<HTMLElement>('#settings-utility-content');
+if (!sidebar) throw new Error('Missing Library settings utility surface for filesystem connection controls');
 
 const style = document.createElement('style');
 style.textContent = `
