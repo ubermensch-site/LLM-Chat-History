@@ -84,7 +84,7 @@ nav.append(
   archivedButton,
   detail
 );
-sidebarControls.before(nav);
+sidebarControls.after(nav);
 
 const dbPromise = openArchiveDb();
 let destroyed = false;
