@@ -581,17 +581,33 @@ await runScenario('Scenario 5 — pause, private interval and resume', async (ha
   await clickRecorderText(page, 'More options', 'SUMMARY');
   assert.equal(await recorderControlDisabled(page, 'Bring in older messages'), true);
 
-  const privateWindow = [
+  const privatePlaceholderWindow = [
     ...before,
     userTurn('p-u2', 'scenario 5 private interval'),
-    assistantTurn('p-a2', 'p-m2', 'scenario 5 private interval', {
+    assistantTurn('p-a2', 'request-placeholder-p-a2', '', {
       activities: [{ text: 'Private paused activity', testId: 'reasoning-summary' }]
     })
   ];
   await renderConversation(page, {
     title: 'Pause privacy',
     conversationId: 'e2e-pause',
-    turns: privateWindow
+    turns: privatePlaceholderWindow,
+    generating: true
+  });
+  await sleep(300);
+
+  const privateFinalWindow = [
+    ...before,
+    userTurn('p-u2', 'scenario 5 private interval'),
+    assistantTurn('p-a2', 'p-m2-final', 'scenario 5 private interval', {
+      activities: [{ text: 'Private paused activity', testId: 'reasoning-summary' }]
+    })
+  ];
+  await renderConversation(page, {
+    title: 'Pause privacy',
+    conversationId: 'e2e-pause',
+    turns: privateFinalWindow,
+    generating: false
   });
   await sleep(500);
 
@@ -599,7 +615,7 @@ await runScenario('Scenario 5 — pause, private interval and resume', async (ha
   await sleep(250);
 
   const after = [
-    ...privateWindow,
+    ...privateFinalWindow,
     userTurn('p-u3', 'scenario 5 after resume'),
     assistantTurn('p-a3', 'p-m3', 'scenario 5 after resume')
   ];
@@ -624,11 +640,21 @@ await runScenario('Scenario 5 — pause, private interval and resume', async (ha
     turns: [userTurn('other-u', 'other'), assistantTurn('other-a', 'other-m', 'other')]
   });
   await sleep(700);
+
+  const rerenderedAfter = [
+    ...before,
+    userTurn('p-u2-rerendered', 'scenario 5 private interval'),
+    assistantTurn('p-a2-rerendered', 'p-m2-rerendered', 'scenario 5 private interval', {
+      activities: [{ text: 'Private paused activity', testId: 'reasoning-summary' }]
+    }),
+    userTurn('p-u3', 'scenario 5 after resume'),
+    assistantTurn('p-a3', 'p-m3', 'scenario 5 after resume')
+  ];
   await renderConversation(page, {
     title: 'Pause privacy',
     conversationId: 'e2e-pause',
     navigation: 'push',
-    turns: after
+    turns: rerenderedAfter
   });
   await sleep(700);
 
