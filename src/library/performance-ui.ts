@@ -13,8 +13,8 @@ import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
 import { listProjects } from '../storage/projects';
 
-const sidebar = document.querySelector<HTMLElement>('.sidebar');
-if (!sidebar) throw new Error('Missing Library sidebar for performance controls');
+const sidebar = document.querySelector<HTMLElement>('#settings-utility-content');
+if (!sidebar) throw new Error('Missing Library settings utility surface for performance controls');
 
 const style = document.createElement('style');
 style.textContent = `

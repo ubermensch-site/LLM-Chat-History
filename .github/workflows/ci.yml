@@ -50,7 +50,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: llm-chat-history-automated-qa-${{ github.sha }}
-          path: release-qa-automated.json
+          path: |
+            release-qa-automated.json
+            release-qa-library-light.png
+            release-qa-library-dark.png
+            release-qa-library-settings.png
           if-no-files-found: error
           retention-days: 30
 

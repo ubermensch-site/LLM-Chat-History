@@ -12,10 +12,12 @@
     <aside class="sidebar" aria-label="Conversation library">
       <header class="sidebar-header">
         <div class="brand-block">
-          <h1 class="brand">LLM Chat History</h1>
-          <p class="brand-help">Your locally saved LLM conversations.</p>
+          <div class="brand-mark" aria-hidden="true">L</div>
+          <div>
+            <h1 class="brand">LLM Chat History</h1>
+            <p class="brand-help">Your private conversation workspace</p>
+          </div>
         </div>
-        <span class="local-badge">Local</span>
       </header>
 
       <div class="sidebar-controls">
@@ -24,13 +26,13 @@
             id="search"
             class="search"
             type="search"
-            placeholder="Search conversations, messages, and ideas…"
+            placeholder="Search conversations…"
             autocomplete="off"
             aria-label="Search conversations, messages, and ideas"
           >
-          <span class="shortcut" aria-hidden="true">Ctrl K</span>
+          <span class="shortcut" aria-hidden="true">⌘K</span>
         </div>
-        <p class="small-help sidebar-search-help">Search titles and captured message text. Press Ctrl+K or ⌘K from anywhere.</p>
+        <p class="small-help sidebar-search-help">Search titles and captured message text.</p>
 
         <div class="filter-block">
           <label class="filter-label" for="project-filter">Project</label>
@@ -47,61 +49,54 @@
       </div>
 
       <section class="sidebar-list-wrap" aria-label="Saved conversations">
-        <div id="count" class="count">Loading your saved conversations…</div>
+        <div id="count" class="count">Loading conversations…</div>
         <div id="conversation-list" class="list" aria-live="polite"></div>
       </section>
 
       <footer class="sidebar-footer">
-        <section class="privacy-card" aria-label="Privacy status">
-          <div class="privacy-title">Local &amp; private</div>
-          <p class="privacy-copy">Saved in this browser. The extension does not upload your conversation archive.</p>
-        </section>
-
-        <section class="theme-card" aria-label="Appearance">
-          <div class="theme-title">Appearance</div>
-          <div class="theme-help">Auto follows your system theme.</div>
-          <div class="theme-buttons">
-            <button id="theme-system" class="theme-choice" type="button">Auto</button>
-            <button id="theme-light" class="theme-choice" type="button">Light</button>
-            <button id="theme-dark" class="theme-choice" type="button">Dark</button>
-          </div>
-        </section>
+        <div class="sidebar-local-status">
+          <span class="sidebar-local-dot" aria-hidden="true"></span>
+          <span>Stored locally</span>
+        </div>
+        <button id="settings-open" class="sidebar-settings-button" type="button" aria-controls="settings-drawer" aria-expanded="false">
+          <span aria-hidden="true">⚙</span>
+          <span>Settings & tools</span>
+        </button>
       </footer>
     </aside>
 
     <main>
       <header class="topbar">
-        <div class="topbar-row">
-          <div class="breadcrumb" aria-label="Location">
-            <span>Workspace</span>
-            <span aria-hidden="true">›</span>
-            <strong>Library</strong>
-          </div>
-          <span class="workspace-badge">Local workspace</span>
-        </div>
-
-        <div class="topbar-row">
+        <div class="topbar-row premium-topbar-row">
           <div class="heading">
             <h1 id="title">Library</h1>
             <p id="meta">Choose a conversation to read it.</p>
           </div>
 
           <div class="action-block">
-            <div class="actions" aria-label="Conversation actions">
-              <button id="rename-chat" class="button" type="button" disabled>Rename</button>
-              <button id="archive-chat" class="button" type="button" disabled>Archive</button>
-              <button id="delete-chat" class="button danger" type="button" disabled>Delete</button>
-              <button id="import-json" class="button" type="button" disabled>Restore backup</button>
-              <button id="download-md" class="button primary" type="button" disabled>Export Markdown</button>
-              <button id="download-json" class="button" type="button" disabled>Export JSON</button>
-              <input
-                id="import-file"
-                class="visually-hidden"
-                type="file"
-                accept="application/json,.json"
-                aria-label="Choose a backup file to restore"
-              >
-            </div>
+            <button id="download-md" class="button primary topbar-primary-action" type="button" disabled>Export</button>
+
+            <details class="action-menu">
+              <summary class="button action-menu-trigger" aria-label="More conversation actions">•••</summary>
+              <div class="action-menu-panel">
+                <div class="action-menu-heading">Conversation</div>
+                <div class="actions" aria-label="Conversation actions">
+                  <button id="rename-chat" class="menu-action" type="button" disabled>Rename</button>
+                  <button id="archive-chat" class="menu-action" type="button" disabled>Archive</button>
+                  <button id="download-json" class="menu-action" type="button" disabled>Export JSON</button>
+                  <button id="import-json" class="menu-action" type="button" disabled>Restore backup</button>
+                  <button id="delete-chat" class="menu-action danger" type="button" disabled>Delete this copy</button>
+                  <input
+                    id="import-file"
+                    class="visually-hidden"
+                    type="file"
+                    accept="application/json,.json"
+                    aria-label="Choose a backup file to restore"
+                  >
+                </div>
+              </div>
+            </details>
+
             <p id="library-status" class="library-status" aria-live="polite"></p>
           </div>
         </div>
@@ -110,8 +105,8 @@
       <div class="organizer-shell">
         <details class="organizer-panel">
           <summary class="organizer-summary">
-            <span>Organize this conversation</span>
-            <span class="organizer-summary-copy">Project, folder, and tags</span>
+            <span>Conversation details</span>
+            <span class="organizer-summary-copy">Project · folder · tags</span>
           </summary>
 
           <section class="organizer" aria-label="Organize this conversation">
@@ -125,7 +120,7 @@
                 <button id="rename-project" class="button" type="button" disabled>Rename</button>
                 <button id="delete-project" class="button danger" type="button" disabled>Delete</button>
               </div>
-              <p class="small-help">Use projects for larger areas of work or research.</p>
+              <p class="small-help">Projects group larger areas of work.</p>
             </div>
 
             <div class="organizer-field">
@@ -138,7 +133,7 @@
                 <button id="rename-folder" class="button" type="button" disabled>Rename</button>
                 <button id="delete-folder" class="button danger" type="button" disabled>Delete</button>
               </div>
-              <p class="small-help">Folders are optional and stay within their project.</p>
+              <p class="small-help">Folders stay inside their project.</p>
             </div>
 
             <div class="organizer-field">
@@ -154,7 +149,7 @@
                 >
                 <button id="save-tags" class="button primary" type="button" disabled>Save</button>
               </div>
-              <p class="small-help">Use a few memorable words to make future search and filtering easier.</p>
+              <p class="small-help">Use a few memorable tags for retrieval.</p>
             </div>
           </section>
         </details>
@@ -165,6 +160,46 @@
       </section>
     </main>
   </div>
+
+  <button id="settings-scrim" class="settings-scrim" type="button" tabindex="-1" aria-hidden="true" aria-label="Close settings"></button>
+
+  <aside id="settings-drawer" class="settings-drawer" aria-label="Settings and tools" aria-hidden="true">
+    <header class="settings-drawer-header">
+      <div>
+        <p class="settings-eyebrow">Workspace</p>
+        <h2>Settings & tools</h2>
+      </div>
+      <button id="settings-close" class="settings-close" type="button" aria-label="Close settings">×</button>
+    </header>
+
+    <div class="settings-drawer-body">
+      <section class="settings-section">
+        <div class="settings-section-heading">
+          <div>
+            <h3>Appearance</h3>
+            <p>Choose how the Library looks on this device.</p>
+          </div>
+        </div>
+        <div class="theme-buttons premium-theme-buttons">
+          <button id="theme-system" class="theme-choice" type="button">Auto</button>
+          <button id="theme-light" class="theme-choice" type="button">Light</button>
+          <button id="theme-dark" class="theme-choice" type="button">Dark</button>
+        </div>
+      </section>
+
+      <section class="settings-section settings-privacy">
+        <div class="settings-section-heading">
+          <div>
+            <h3>Local & private</h3>
+            <p>Your archive stays in this browser unless you explicitly export or connect a local folder.</p>
+          </div>
+          <span class="privacy-status-dot" aria-hidden="true"></span>
+        </div>
+      </section>
+
+      <div id="settings-utility-content" class="settings-utility-content"></div>
+    </div>
+  </aside>
 
   <script src="library.js"></script>
 </body>

@@ -6,8 +6,8 @@ import {
 import { ArchiveRepository } from '../storage/archive';
 import { openArchiveDb } from '../storage/db';
 
-const sidebar = document.querySelector<HTMLElement>('.sidebar');
-if (!sidebar) throw new Error('Missing Library sidebar for diagnostics controls');
+const sidebar = document.querySelector<HTMLElement>('#settings-utility-content');
+if (!sidebar) throw new Error('Missing Library settings utility surface for diagnostics controls');
 
 const style = document.createElement('style');
 style.textContent = `

@@ -1,7 +1,7 @@
 import { evaluateLiveQaEvidence, renderLiveQaEvidenceMarkdown } from '../qa/live-qa-evidence';
 
-const sidebar = document.querySelector<HTMLElement>('.sidebar');
-if (!sidebar) throw new Error('Missing Library sidebar for live QA evidence controls');
+const sidebar = document.querySelector<HTMLElement>('#settings-utility-content');
+if (!sidebar) throw new Error('Missing Library settings utility surface for live QA evidence controls');
 
 const style = document.createElement('style');
 style.textContent = `

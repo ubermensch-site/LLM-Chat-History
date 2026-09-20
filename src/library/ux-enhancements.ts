@@ -24,9 +24,17 @@ let themePreference: ThemePreference = 'system';
 let destroyed = false;
 let annotationScheduled = false;
 let databasePromise: Promise<IDBDatabase> | null = null;
+let statusClearTimer: ReturnType<typeof setTimeout> | null = null;
 
 function setLibraryStatus(message: string): void {
-  if (libraryStatus) libraryStatus.textContent = message;
+  if (!libraryStatus) return;
+  if (statusClearTimer) clearTimeout(statusClearTimer);
+  libraryStatus.textContent = message;
+  if (!message) return;
+  statusClearTimer = setTimeout(() => {
+    statusClearTimer = null;
+    if (libraryStatus.textContent === message) libraryStatus.textContent = '';
+  }, 2400);
 }
 
 function applyTheme(): void {
@@ -232,5 +240,6 @@ window.addEventListener('pagehide', () => {
   observer.disconnect();
   media.removeEventListener('change', onMediaChange);
   chrome.storage.onChanged.removeListener(onStorageChange);
+  if (statusClearTimer) clearTimeout(statusClearTimer);
   void databasePromise?.then((db) => db.close());
 }, { once: true });
