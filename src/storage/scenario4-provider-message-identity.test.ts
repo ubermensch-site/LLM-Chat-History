@@ -273,7 +273,9 @@ describe('Scenario 4 provider message identity across SPA rerenders', () => {
     expect(messages).toHaveLength(0);
 
     const events = await repository.listEvents(conversation!.id);
-    expect(events.filter((event) => event.type === 'turn-suppressed')).toHaveLength(1);
+    const suppressed = events.filter((event) => event.type === 'turn-suppressed');
+    expect(suppressed.some((event) => event.id.includes('suppressed-slot:'))).toBe(true);
+    expect(suppressed.some((event) => event.data.providerMessageId === 'paused-message-stable')).toBe(true);
     expect(JSON.stringify(events)).not.toContain('private paused response');
   });
 });
