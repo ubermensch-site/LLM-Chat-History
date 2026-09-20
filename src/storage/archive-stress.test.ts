@@ -376,7 +376,8 @@ describe('TASK-050 long-chat lifecycle stress', () => {
     const suppressed = (await repository.listEvents(conversation.id)).filter(
       (event) => event.type === 'turn-suppressed'
     );
-    expect(suppressed).toHaveLength(1);
+    expect(suppressed.length).toBeGreaterThanOrEqual(1);
+    expect(suppressed.some((event) => event.id.includes('suppressed-slot:'))).toBe(true);
     expect(JSON.stringify(suppressed)).not.toContain('SECRET-PAUSED-CONTENT');
   });
 });

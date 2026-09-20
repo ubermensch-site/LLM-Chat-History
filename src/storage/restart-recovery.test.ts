@@ -230,7 +230,9 @@ describe('restart and reopen recovery', () => {
     ]);
 
     const events = await repository.listEvents(conversations[0]!.id);
-    expect(events.filter((event) => event.type === 'turn-suppressed')).toHaveLength(1);
+    const suppressed = events.filter((event) => event.type === 'turn-suppressed');
+    expect(suppressed.length).toBeGreaterThanOrEqual(1);
+    expect(suppressed.some((event) => event.id.includes('suppressed-slot:'))).toBe(true);
     expect(events.some((event) => event.type === 'recording-paused')).toBe(true);
     expect(events.some((event) => event.type === 'recording-resumed')).toBe(true);
     expect(JSON.stringify(events)).not.toContain('Private text must never be archived');

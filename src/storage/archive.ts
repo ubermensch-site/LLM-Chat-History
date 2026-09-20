@@ -64,15 +64,25 @@ function suppressedProviderMessageEventId(
   return `suppressed-message:${conversationId}:${encodeURIComponent(providerMessageId)}`;
 }
 
+function suppressedLogicalSlotEventId(
+  conversationId: string,
+  turn: ProviderTurnObservation
+): string {
+  return `suppressed-slot:${conversationId}:${turn.role}:${turn.orderHint}`;
+}
+
 function suppressionEventIds(
   conversationId: string,
   turn: ProviderTurnObservation
 ): string[] {
-  const ids = [suppressedTurnEventId(conversationId, turn.providerTurnId)];
+  const ids = [
+    suppressedLogicalSlotEventId(conversationId, turn),
+    suppressedTurnEventId(conversationId, turn.providerTurnId)
+  ];
   if (turn.providerMessageId) {
-    ids.unshift(suppressedProviderMessageEventId(conversationId, turn.providerMessageId));
+    ids.push(suppressedProviderMessageEventId(conversationId, turn.providerMessageId));
   }
-  return ids;
+  return [...new Set(ids)];
 }
 
 async function archivedMessagesForObservedTurn(
@@ -578,7 +588,6 @@ export class ArchiveRepository {
   ): Promise<void> {
     const contentHash = await sha256Hex(turnContentHashInput(turn));
     const suppressionIds = suppressionEventIds(conversation.id, turn);
-    const suppressionId = suppressionIds[0]!;
 
     const readTransaction = this.db.transaction([STORES.messages, STORES.events], 'readonly');
     const messageStore = readTransaction.objectStore(STORES.messages);
@@ -595,23 +604,32 @@ export class ArchiveRepository {
 
     const existing = matchingMessages[0];
     const activityChanged = observedActivityChanged(existing?.visibleActivities, turn.visibleActivities);
-    if (suppressionEvents.some(Boolean) || (existing?.contentHash === contentHash && !activityChanged)) {
+    if (existing?.contentHash === contentHash && !activityChanged) {
       return;
     }
 
-    await this.appendEvent(
-      archiveEvent(
-        conversation.id,
-        'turn-suppressed',
-        turn.observedAt,
-        {
-          providerTurnId: turn.providerTurnId,
-          providerMessageId: turn.providerMessageId,
-          reason: state
-        },
-        suppressionId
-      )
+    const missingSuppressionIds = suppressionIds.filter(
+      (_id, index) => !suppressionEvents[index]
     );
+    if (!missingSuppressionIds.length) return;
+
+    for (const id of missingSuppressionIds) {
+      await this.appendEvent(
+        archiveEvent(
+          conversation.id,
+          'turn-suppressed',
+          turn.observedAt,
+          {
+            providerTurnId: turn.providerTurnId,
+            providerMessageId: turn.providerMessageId,
+            role: turn.role,
+            orderHint: turn.orderHint,
+            reason: state
+          },
+          id
+        )
+      );
+    }
   }
 
   private async persistTurn(
