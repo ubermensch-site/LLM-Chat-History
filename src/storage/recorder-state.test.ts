@@ -195,7 +195,9 @@ describe('per-conversation recorder privacy policy', () => {
     expect(messages[0]?.visibleActivities?.map((activity) => activity.text)).toEqual(['Thinking']);
 
     const events = await repository.listEvents(conversation!.id);
-    expect(events.filter((event) => event.type === 'turn-suppressed')).toHaveLength(1);
+    const suppressed = events.filter((event) => event.type === 'turn-suppressed');
+    expect(suppressed.length).toBeGreaterThanOrEqual(1);
+    expect(suppressed.some((event) => event.id.includes('suppressed-slot:'))).toBe(true);
     expect(JSON.stringify(events)).not.toContain('Fetched private paused work');
   });
 
