@@ -1046,12 +1046,16 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   assert.equal(await driverPage.locator('#settings-utility-content .diagnostics-card').count(), 1);
   assert.equal(await driverPage.locator('#settings-utility-content .performance-card').count(), 1);
   assert.equal(await driverPage.locator('#settings-utility-content .qa-evidence-card').count(), 1);
+  await driverPage.screenshot({
+    path: resolve(root, 'release-qa-library-settings.png'),
+    fullPage: true
+  });
 
   await driverPage.locator('#theme-light').click();
   await driverPage.waitForFunction(() => document.documentElement.dataset.theme === 'light');
   await driverPage.locator('#settings-close').click();
   await driverPage.waitForFunction(() => !document.getElementById('settings-drawer')?.classList.contains('is-open'));
-  await driverPage.waitForTimeout(260);
+  await driverPage.waitForTimeout(2500);
   await driverPage.screenshot({
     path: resolve(root, 'release-qa-library-light.png'),
     fullPage: true
@@ -1062,7 +1066,7 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   await driverPage.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
   await driverPage.locator('#settings-close').click();
   await driverPage.waitForFunction(() => !document.getElementById('settings-drawer')?.classList.contains('is-open'));
-  await driverPage.waitForTimeout(260);
+  await driverPage.waitForTimeout(2500);
   await driverPage.screenshot({
     path: resolve(root, 'release-qa-library-dark.png'),
     fullPage: true
