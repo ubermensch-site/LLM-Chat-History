@@ -55,6 +55,8 @@ jobs:
             release-qa-library-light.png
             release-qa-library-dark.png
             release-qa-library-settings.png
+            release-qa-library-mobile.png
+            release-qa-library-mobile-drawer.png
           if-no-files-found: error
           retention-days: 30
 
