@@ -1104,6 +1104,19 @@ body.settings-open {
 }
 
 @media (max-width: 760px) {
+  /* Keep conversation identity and secondary actions visible beneath the compact app bar. */
+  .topbar > .premium-topbar-row:first-child {
+    display: flex;
+  }
+
+  .premium-topbar-row {
+    gap: 0.65rem;
+  }
+
+  .mobile-actions-toggle {
+    align-self: flex-start;
+  }
+
   .message.user {
     width: min(92%, 38rem);
   }
