@@ -5,63 +5,78 @@ import type { ArchiveVisibleActivity } from '../storage/schema';
 const style = document.createElement('style');
 style.textContent = `
   .visible-activity {
-    margin-top: 10px;
-    border: 1px solid var(--outline-variant);
-    border-radius: 14px;
-    background: var(--surface-container);
-    overflow: hidden;
+    margin-top: 0.7rem;
+    padding: 0.08rem 0 0.08rem 0.78rem;
+    border: 0;
+    border-left: 2px solid color-mix(
+      in srgb,
+      var(--accent, var(--primary)) 34%,
+      var(--border, var(--outline-variant))
+    );
+    border-radius: 0;
+    background: transparent;
   }
   .visible-activity > summary {
-    padding: 10px 12px;
+    padding: 0.34rem 0;
     cursor: pointer;
-    font-size: 12px;
-    font-weight: 800;
-    color: var(--on-surface);
+    font-size: 0.68rem;
+    font-weight: 650;
+    color: var(--ink, var(--on-surface));
+  }
+  .visible-activity > summary:hover {
+    color: var(--accent-strong, var(--primary));
   }
   .visible-activity > summary:focus-visible {
-    outline: 3px solid color-mix(in srgb, var(--primary) 45%, transparent);
-    outline-offset: -3px;
+    outline: 2px solid color-mix(
+      in srgb,
+      var(--focus, var(--primary)) 48%,
+      transparent
+    );
+    outline-offset: 3px;
+    border-radius: 0.25rem;
   }
   .visible-activity-help {
-    margin: 0;
-    padding: 0 12px 10px;
-    font-size: 11px;
-    line-height: 1.45;
-    color: var(--on-surface-variant);
+    margin: 0.16rem 0 0;
+    padding: 0 0 0.52rem;
+    max-width: 72ch;
+    font-size: 0.64rem;
+    line-height: 1.5;
+    color: var(--ink-muted, var(--on-surface-variant));
   }
   .visible-activity-body {
     display: grid;
-    gap: 8px;
-    padding: 0 10px 10px;
+    gap: 0.48rem;
+    padding: 0.1rem 0 0.35rem;
   }
   .visible-activity-row {
-    padding: 10px;
-    border-radius: 10px;
-    background: var(--surface);
-    border: 1px solid var(--outline-variant);
+    padding: 0.62rem 0.72rem;
+    border-radius: 0.62rem;
+    background: var(--surface-quiet, var(--surface));
+    border: 1px solid var(--border, var(--outline-variant));
   }
   .visible-activity-heading {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 10px;
-    font-size: 11px;
-    color: var(--primary);
+    gap: 0.65rem;
+    font-size: 0.64rem;
+    color: var(--accent-strong, var(--primary));
   }
   .visible-activity-heading time {
     flex: 0 0 auto;
-    font-size: 10px;
-    color: var(--on-surface-variant);
+    font-size: 0.6rem;
+    color: var(--ink-subtle, var(--on-surface-variant));
   }
   .visible-activity-text {
-    margin-top: 6px;
+    margin-top: 0.36rem;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--on-surface);
+    font-size: 0.72rem;
+    line-height: 1.55;
+    color: var(--ink, var(--on-surface));
   }
 `;
+
 document.head.append(style);
 
 function humanDate(iso: string): string {
