@@ -1067,6 +1067,13 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   await driverPage.setViewportSize({ width: 390, height: 844 });
   await driverPage.waitForFunction(() => window.matchMedia('(max-width: 760px)').matches);
   await driverPage.waitForTimeout(500);
+  assert.equal(await driverPage.locator('#title').isVisible(), true, 'mobile conversation title must remain visible');
+  assert.equal(await driverPage.locator('#title').innerText(), 'Library automation');
+  assert.equal(
+    await driverPage.locator('.mobile-actions-toggle').isVisible(),
+    true,
+    'mobile conversation actions trigger must remain visible'
+  );
   await driverPage.screenshot({
     path: resolve(root, 'release-qa-library-mobile.png'),
     fullPage: true
