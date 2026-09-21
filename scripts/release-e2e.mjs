@@ -1062,6 +1062,36 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
     fullPage: true
   });
 
+  // Responsive visual gate: inspect the real built Library at a common mobile viewport,
+  // including the transformed conversation drawer rather than only the desktop shell.
+  await driverPage.setViewportSize({ width: 390, height: 844 });
+  await driverPage.waitForFunction(() => window.matchMedia('(max-width: 760px)').matches);
+  await driverPage.waitForTimeout(500);
+  assert.equal(await driverPage.locator('#title').isVisible(), true, 'mobile conversation title must remain visible');
+  assert.equal(await driverPage.locator('#title').innerText(), 'Library automation');
+  assert.equal(
+    await driverPage.locator('.mobile-actions-toggle').isVisible(),
+    true,
+    'mobile conversation actions trigger must remain visible'
+  );
+  await driverPage.screenshot({
+    path: resolve(root, 'release-qa-library-mobile.png'),
+    fullPage: true
+  });
+
+  await driverPage.locator('.mobile-nav-button').click();
+  await driverPage.waitForFunction(() => document.querySelector('.sidebar')?.classList.contains('mobile-open'));
+  await driverPage.waitForTimeout(250);
+  await driverPage.screenshot({
+    path: resolve(root, 'release-qa-library-mobile-drawer.png'),
+    fullPage: true
+  });
+  await driverPage.locator('.mobile-drawer-close').click();
+  await driverPage.waitForFunction(() => !document.querySelector('.sidebar')?.classList.contains('mobile-open'));
+  await driverPage.setViewportSize({ width: 1280, height: 900 });
+  await driverPage.waitForFunction(() => !window.matchMedia('(max-width: 760px)').matches);
+  await driverPage.waitForTimeout(250);
+
   await driverPage.locator('#settings-open').click();
   await driverPage.locator('#theme-dark').click();
   await driverPage.waitForFunction(() => document.documentElement.dataset.theme === 'dark');

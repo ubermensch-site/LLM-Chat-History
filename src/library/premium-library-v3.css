@@ -1010,3 +1010,120 @@ body.settings-open {
     width: 96%;
   }
 }
+
+
+/* Premium final visual polish: reader alignment, restrained selection, and drawer finish. */
+
+/* Keep the page title, conversation metadata, organizer and transcript on one reader grid. */
+@media (min-width: 761px) {
+  .premium-topbar-row {
+    width: min(100%, calc(var(--reader-width) + 5rem));
+    margin-inline: auto;
+    padding-inline: clamp(1rem, 2.4vw, 2.4rem);
+    box-sizing: border-box;
+  }
+}
+
+/* Give the shell a little more depth without returning to card-heavy chrome. */
+.sidebar {
+  box-shadow: 10px 0 34px rgb(20 28 22 / 0.018);
+}
+
+:root[data-theme='dark'] .sidebar {
+  box-shadow: 10px 0 34px rgb(0 0 0 / 0.1);
+}
+
+.library-nav-item.selected {
+  background: color-mix(in srgb, var(--accent-softer) 56%, var(--surface-muted));
+}
+
+.conversation.selected {
+  background: color-mix(in srgb, var(--accent-softer) 42%, var(--surface-muted));
+  box-shadow:
+    inset 2px 0 0 var(--accent),
+    0 1px 2px rgb(20 28 22 / 0.025);
+}
+
+.conversation.selected .conversation-title {
+  color: var(--ink);
+}
+
+.count {
+  color: var(--ink-subtle);
+}
+
+/* Make the primary action feel branded and intentional while keeping secondary actions quiet. */
+.button.topbar-primary-action {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 1px 2px rgb(20 28 22 / 0.08);
+}
+
+.button.topbar-primary-action:hover:not(:disabled) {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+}
+
+.action-menu-trigger {
+  background: color-mix(in srgb, var(--surface-raised) 90%, var(--surface));
+}
+
+.message.assistant {
+  padding-block: 1.5rem;
+}
+
+.message.user {
+  width: min(72%, 39rem);
+  background: color-mix(in srgb, var(--surface-muted) 90%, var(--surface-raised));
+}
+
+.message.user .content {
+  max-width: 60ch;
+}
+
+/* Keep Settings polished even when technical tools make the panel long. */
+.settings-drawer-body {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink-subtle) 48%, transparent) transparent;
+}
+
+.settings-drawer-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-drawer-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-drawer-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink-subtle) 44%, transparent);
+  background-clip: padding-box;
+}
+
+@media (max-width: 760px) {
+  /* Keep conversation identity and secondary actions visible beneath the compact app bar. */
+  .topbar > .premium-topbar-row:first-child {
+    display: flex;
+  }
+
+  .premium-topbar-row {
+    gap: 0.65rem;
+  }
+
+  .mobile-actions-toggle {
+    align-self: flex-start;
+  }
+
+  .message.user {
+    width: min(92%, 38rem);
+  }
+}
+
+@media (max-width: 480px) {
+  .message.user {
+    width: 96%;
+  }
+}
