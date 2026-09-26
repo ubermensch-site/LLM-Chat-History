@@ -1,16 +1,36 @@
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+export type MarkdownInlineNode =
+  | { type: 'text'; value: string }
+  | { type: 'strong'; children: MarkdownInlineNode[] }
+  | { type: 'emphasis'; children: MarkdownInlineNode[] }
+  | { type: 'delete'; children: MarkdownInlineNode[] }
+  | { type: 'code'; value: string }
+  | { type: 'link'; target: string; children: MarkdownInlineNode[] }
+  | { type: 'image-placeholder'; alt: MarkdownInlineNode[] };
+
+export type MarkdownAlignment = 'left' | 'center' | 'right';
+
+export type MarkdownBlock =
+  | { type: 'paragraph'; children: MarkdownInlineNode[] }
+  | { type: 'heading'; level: number; children: MarkdownInlineNode[] }
+  | {
+      type: 'list';
+      ordered: boolean;
+      start: number;
+      items: Array<{ children: MarkdownInlineNode[]; nested: MarkdownBlock[] }>;
+    }
+  | { type: 'code-block'; language: string; value: string }
+  | { type: 'blockquote'; children: MarkdownBlock[] }
+  | {
+      type: 'table';
+      alignments: MarkdownAlignment[];
+      headers: MarkdownInlineNode[][];
+      rows: MarkdownInlineNode[][][];
+    }
+  | { type: 'rule' };
 
 function safeLinkTarget(value: string): string | null {
   const target = value.trim();
-  if (!/^(https?:\/\/|mailto:)/i.test(target)) return null;
-  return target;
+  return /^(https?:\/\/|mailto:)/i.test(target) ? target : null;
 }
 
 function findUnescaped(source: string, needle: string, from: number): number {
@@ -31,15 +51,22 @@ function backtickRun(source: string, start: number): number {
   return length;
 }
 
-export function renderMarkdownInline(source: string): string {
-  let output = '';
+function pushText(nodes: MarkdownInlineNode[], value: string): void {
+  if (!value) return;
+  const previous = nodes.at(-1);
+  if (previous?.type === 'text') previous.value += value;
+  else nodes.push({ type: 'text', value });
+}
+
+export function parseMarkdownInline(source: string): MarkdownInlineNode[] {
+  const nodes: MarkdownInlineNode[] = [];
   let index = 0;
 
   while (index < source.length) {
     const character = source[index]!;
 
     if (character === '\\' && index + 1 < source.length) {
-      output += escapeHtml(source[index + 1]!);
+      pushText(nodes, source[index + 1]!);
       index += 2;
       continue;
     }
@@ -49,8 +76,10 @@ export function renderMarkdownInline(source: string): string {
       const delimiter = '`'.repeat(runLength);
       const closing = findUnescaped(source, delimiter, index + runLength);
       if (closing !== -1) {
-        const code = source.slice(index + runLength, closing).replace(/^ | $/g, '');
-        output += `<code class="inline-code">${escapeHtml(code)}</code>`;
+        nodes.push({
+          type: 'code',
+          value: source.slice(index + runLength, closing).replace(/^ | $/g, '')
+        });
         index = closing + runLength;
         continue;
       }
@@ -61,8 +90,10 @@ export function renderMarkdownInline(source: string): string {
       if (labelEnd !== -1 && source[labelEnd + 1] === '(') {
         const targetEnd = findUnescaped(source, ')', labelEnd + 2);
         if (targetEnd !== -1) {
-          const alt = source.slice(index + 2, labelEnd);
-          output += `<span class="markdown-image-placeholder">Image: ${renderMarkdownInline(alt)}</span>`;
+          nodes.push({
+            type: 'image-placeholder',
+            alt: parseMarkdownInline(source.slice(index + 2, labelEnd))
+          });
           index = targetEnd + 1;
           continue;
         }
@@ -74,14 +105,10 @@ export function renderMarkdownInline(source: string): string {
       if (labelEnd !== -1 && source[labelEnd + 1] === '(') {
         const targetEnd = findUnescaped(source, ')', labelEnd + 2);
         if (targetEnd !== -1) {
-          const label = source.slice(index + 1, labelEnd);
-          const rawTarget = source.slice(labelEnd + 2, targetEnd);
-          const target = safeLinkTarget(rawTarget);
-          if (target) {
-            output += `<a href="${escapeHtml(target)}" target="_blank" rel="noopener noreferrer">${renderMarkdownInline(label)}</a>`;
-          } else {
-            output += renderMarkdownInline(label);
-          }
+          const label = parseMarkdownInline(source.slice(index + 1, labelEnd));
+          const target = safeLinkTarget(source.slice(labelEnd + 2, targetEnd));
+          if (target) nodes.push({ type: 'link', target, children: label });
+          else nodes.push(...label);
           index = targetEnd + 1;
           continue;
         }
@@ -93,7 +120,10 @@ export function renderMarkdownInline(source: string): string {
     if (strongDelimiter) {
       const closing = findUnescaped(source, strongDelimiter, index + 2);
       if (closing !== -1) {
-        output += `<strong>${renderMarkdownInline(source.slice(index + 2, closing))}</strong>`;
+        nodes.push({
+          type: 'strong',
+          children: parseMarkdownInline(source.slice(index + 2, closing))
+        });
         index = closing + 2;
         continue;
       }
@@ -102,7 +132,10 @@ export function renderMarkdownInline(source: string): string {
     if (source.startsWith('~~', index)) {
       const closing = findUnescaped(source, '~~', index + 2);
       if (closing !== -1) {
-        output += `<del>${renderMarkdownInline(source.slice(index + 2, closing))}</del>`;
+        nodes.push({
+          type: 'delete',
+          children: parseMarkdownInline(source.slice(index + 2, closing))
+        });
         index = closing + 2;
         continue;
       }
@@ -111,17 +144,20 @@ export function renderMarkdownInline(source: string): string {
     if (character === '*' || character === '_') {
       const closing = findUnescaped(source, character, index + 1);
       if (closing !== -1) {
-        output += `<em>${renderMarkdownInline(source.slice(index + 1, closing))}</em>`;
+        nodes.push({
+          type: 'emphasis',
+          children: parseMarkdownInline(source.slice(index + 1, closing))
+        });
         index = closing + 1;
         continue;
       }
     }
 
-    output += escapeHtml(character);
+    pushText(nodes, character);
     index += 1;
   }
 
-  return output;
+  return nodes;
 }
 
 interface ListLine {
@@ -143,24 +179,36 @@ function parseListLine(line: string): ListLine | null {
   };
 }
 
-function renderList(lines: string[], start: number, baseIndent: number): { html: string; next: number } {
+function parseList(
+  lines: string[],
+  start: number,
+  baseIndent: number
+): { block: Extract<MarkdownBlock, { type: 'list' }>; next: number } {
   const first = parseListLine(lines[start] ?? '');
-  if (!first) return { html: '', next: start + 1 };
+  if (!first) {
+    return {
+      block: { type: 'list', ordered: false, start: 1, items: [] },
+      next: start + 1
+    };
+  }
 
   const ordered = first.ordered;
-  const startAttribute = ordered && first.number !== 1 ? ` start="${first.number}"` : '';
-  const tag = ordered ? 'ol' : 'ul';
-  const items: string[] = [];
+  const block: Extract<MarkdownBlock, { type: 'list' }> = {
+    type: 'list',
+    ordered,
+    start: first.number,
+    items: []
+  };
   let index = start;
 
   while (index < lines.length) {
     const current = parseListLine(lines[index] ?? '');
-    if (!current || current.indent < baseIndent) break;
-    if (current.indent > baseIndent) break;
-    if (current.ordered !== ordered) break;
+    if (!current || current.indent !== baseIndent || current.ordered !== ordered) break;
 
-    let body = renderMarkdownInline(current.body.trim());
-    let nested = '';
+    const item = {
+      children: parseMarkdownInline(current.body.trim()),
+      nested: [] as MarkdownBlock[]
+    };
     index += 1;
 
     while (index < lines.length) {
@@ -173,8 +221,8 @@ function renderList(lines: string[], start: number, baseIndent: number): { html:
       const nextList = parseListLine(line);
       if (nextList) {
         if (nextList.indent > baseIndent) {
-          const child = renderList(lines, index, nextList.indent);
-          nested += child.html;
+          const child = parseList(lines, index, nextList.indent);
+          item.nested.push(child.block);
           index = child.next;
           continue;
         }
@@ -182,20 +230,17 @@ function renderList(lines: string[], start: number, baseIndent: number): { html:
       }
 
       if (/^\s+/.test(line)) {
-        body += ` ${renderMarkdownInline(line.trim())}`;
+        pushText(item.children, ` ${line.trim()}`);
         index += 1;
         continue;
       }
       break;
     }
 
-    items.push(`<li>${body}${nested}</li>`);
+    block.items.push(item);
   }
 
-  return {
-    html: `<${tag}${startAttribute}>${items.join('')}</${tag}>`,
-    next: index
-  };
+  return { block, next: index };
 }
 
 function splitTableRow(line: string): string[] {
@@ -223,7 +268,7 @@ function splitTableRow(line: string): string[] {
   return cells;
 }
 
-function tableAlignments(separator: string): Array<'left' | 'center' | 'right'> | null {
+function tableAlignments(separator: string): MarkdownAlignment[] | null {
   const cells = splitTableRow(separator);
   if (!cells.length || cells.some((cell) => !/^:?-{3,}:?$/.test(cell.trim()))) return null;
   return cells.map((cell) => {
@@ -234,43 +279,19 @@ function tableAlignments(separator: string): Array<'left' | 'center' | 'right'> 
   });
 }
 
-function renderTable(headerLine: string, separatorLine: string, bodyLines: string[]): string {
-  const alignments = tableAlignments(separatorLine);
-  if (!alignments) return '';
-  const headers = splitTableRow(headerLine);
-  const body = bodyLines.map(splitTableRow);
-  const columnCount = Math.max(headers.length, alignments.length);
-
-  const cellClass = (index: number) => ` class="align-${alignments[index] ?? 'left'}"`;
-  const headHtml = Array.from({ length: columnCount }, (_, index) =>
-    `<th${cellClass(index)}>${renderMarkdownInline(headers[index] ?? '')}</th>`
-  ).join('');
-
-  const bodyHtml = body
-    .map(
-      (row) =>
-        `<tr>${Array.from({ length: columnCount }, (_, index) =>
-          `<td${cellClass(index)}>${renderMarkdownInline(row[index] ?? '')}</td>`
-        ).join('')}</tr>`
-    )
-    .join('');
-
-  return `<div class="markdown-table-scroll"><table><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table></div>`;
-}
-
 function isHorizontalRule(line: string): boolean {
   const compact = line.trim().replace(/\s+/g, '');
   return compact === '---' || compact === '***' || compact === '___';
 }
 
-function isFence(line: string): RegExpMatchArray | null {
+function fenceMatch(line: string): RegExpMatchArray | null {
   return line.match(/^\s*([\`~]{3,})([a-z0-9_+-]*)\s*$/i);
 }
 
 function startsBlock(lines: string[], index: number): boolean {
   const line = lines[index] ?? '';
   if (!line.trim()) return true;
-  if (isFence(line)) return true;
+  if (fenceMatch(line)) return true;
   if (/^\s{0,3}#{1,6}\s+/.test(line)) return true;
   if (isHorizontalRule(line)) return true;
   if (/^\s*>\s?/.test(line)) return true;
@@ -279,9 +300,9 @@ function startsBlock(lines: string[], index: number): boolean {
   return false;
 }
 
-export function renderMarkdownToSafeHtml(markdown: string): string {
+export function parseMarkdown(markdown: string): MarkdownBlock[] {
   const lines = markdown.replace(/\r\n?/g, '\n').split('\n');
-  const blocks: string[] = [];
+  const blocks: MarkdownBlock[] = [];
   let index = 0;
 
   while (index < lines.length) {
@@ -291,7 +312,7 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
       continue;
     }
 
-    const fence = isFence(line);
+    const fence = fenceMatch(line);
     if (fence) {
       const delimiter = fence[1]!;
       const fenceCharacter = delimiter[0]!;
@@ -300,34 +321,33 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
       index += 1;
       while (index < lines.length) {
         const candidate = (lines[index] ?? '').trim();
-        const closing = new RegExp(`^${fenceCharacter}{${delimiter.length},}\\s*$`).test(candidate);
-        if (closing) {
+        const closesFence =
+          candidate.length >= delimiter.length &&
+          [...candidate].every((character) => character === fenceCharacter);
+        if (closesFence) {
           index += 1;
           break;
         }
         body.push(lines[index] ?? '');
         index += 1;
       }
-
-      const languageLabel = language
-        ? `<div class="code-block-label">${escapeHtml(language)}</div>`
-        : '';
-      blocks.push(
-        `<div class="code-block">${languageLabel}<pre><code${language ? ` class="language-${escapeHtml(language)}"` : ''}>${escapeHtml(body.join('\n'))}</code></pre></div>`
-      );
+      blocks.push({ type: 'code-block', language, value: body.join('\n') });
       continue;
     }
 
     const heading = line.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
     if (heading) {
-      const level = heading[1]!.length;
-      blocks.push(`<h${level}>${renderMarkdownInline(heading[2] ?? '')}</h${level}>`);
+      blocks.push({
+        type: 'heading',
+        level: heading[1]!.length,
+        children: parseMarkdownInline(heading[2] ?? '')
+      });
       index += 1;
       continue;
     }
 
     if (isHorizontalRule(line)) {
-      blocks.push('<hr>');
+      blocks.push({ type: 'rule' });
       index += 1;
       continue;
     }
@@ -338,29 +358,30 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
         quote.push((lines[index] ?? '').replace(/^\s*>\s?/, ''));
         index += 1;
       }
-      blocks.push(`<blockquote>${renderMarkdownToSafeHtml(quote.join('\n'))}</blockquote>`);
+      blocks.push({ type: 'blockquote', children: parseMarkdown(quote.join('\n')) });
       continue;
     }
 
-    if (index + 1 < lines.length && tableAlignments(lines[index + 1] ?? '')) {
-      const headerLine = line;
-      const separatorLine = lines[index + 1] ?? '';
-      const bodyLines: string[] = [];
+    const alignments =
+      index + 1 < lines.length ? tableAlignments(lines[index + 1] ?? '') : null;
+    if (alignments) {
+      const headers = splitTableRow(line).map(parseMarkdownInline);
+      const rows: MarkdownInlineNode[][][] = [];
       index += 2;
       while (index < lines.length) {
         const row = lines[index] ?? '';
         if (!row.trim() || !row.includes('|')) break;
-        bodyLines.push(row);
+        rows.push(splitTableRow(row).map(parseMarkdownInline));
         index += 1;
       }
-      blocks.push(renderTable(headerLine, separatorLine, bodyLines));
+      blocks.push({ type: 'table', alignments, headers, rows });
       continue;
     }
 
     const list = parseListLine(line);
     if (list) {
-      const rendered = renderList(lines, index, list.indent);
-      blocks.push(rendered.html);
+      const rendered = parseList(lines, index, list.indent);
+      blocks.push(rendered.block);
       index = rendered.next;
       continue;
     }
@@ -371,8 +392,155 @@ export function renderMarkdownToSafeHtml(markdown: string): string {
       paragraph.push((lines[index] ?? '').trim());
       index += 1;
     }
-    blocks.push(`<p>${renderMarkdownInline(paragraph.join(' '))}</p>`);
+    blocks.push({
+      type: 'paragraph',
+      children: parseMarkdownInline(paragraph.join(' '))
+    });
   }
 
-  return blocks.filter(Boolean).join('\n');
+  return blocks;
+}
+
+function appendInline(parent: HTMLElement, nodes: readonly MarkdownInlineNode[]): void {
+  for (const node of nodes) {
+    if (node.type === 'text') {
+      parent.append(document.createTextNode(node.value));
+      continue;
+    }
+
+    if (node.type === 'code') {
+      const code = document.createElement('code');
+      code.className = 'inline-code';
+      code.textContent = node.value;
+      parent.append(code);
+      continue;
+    }
+
+    if (node.type === 'image-placeholder') {
+      const placeholder = document.createElement('span');
+      placeholder.className = 'markdown-image-placeholder';
+      placeholder.append(document.createTextNode('Image: '));
+      appendInline(placeholder, node.alt);
+      parent.append(placeholder);
+      continue;
+    }
+
+    const element =
+      node.type === 'strong'
+        ? document.createElement('strong')
+        : node.type === 'emphasis'
+          ? document.createElement('em')
+          : node.type === 'delete'
+            ? document.createElement('del')
+            : document.createElement('a');
+
+    if (node.type === 'link') {
+      element.href = node.target;
+      element.target = '_blank';
+      element.rel = 'noopener noreferrer';
+    }
+
+    appendInline(element, node.children);
+    parent.append(element);
+  }
+}
+
+function appendBlock(parent: HTMLElement, block: MarkdownBlock): void {
+  if (block.type === 'paragraph') {
+    const paragraph = document.createElement('p');
+    appendInline(paragraph, block.children);
+    parent.append(paragraph);
+    return;
+  }
+
+  if (block.type === 'heading') {
+    const heading = document.createElement(`h${Math.min(6, Math.max(1, block.level))}`);
+    appendInline(heading, block.children);
+    parent.append(heading);
+    return;
+  }
+
+  if (block.type === 'rule') {
+    parent.append(document.createElement('hr'));
+    return;
+  }
+
+  if (block.type === 'blockquote') {
+    const quote = document.createElement('blockquote');
+    for (const child of block.children) appendBlock(quote, child);
+    parent.append(quote);
+    return;
+  }
+
+  if (block.type === 'code-block') {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-block';
+
+    if (block.language) {
+      const label = document.createElement('div');
+      label.className = 'code-block-label';
+      label.textContent = block.language;
+      wrapper.append(label);
+    }
+
+    const pre = document.createElement('pre');
+    const code = document.createElement('code');
+    if (block.language) code.className = `language-${block.language}`;
+    code.textContent = block.value;
+    pre.append(code);
+    wrapper.append(pre);
+    parent.append(wrapper);
+    return;
+  }
+
+  if (block.type === 'list') {
+    const list = block.ordered ? document.createElement('ol') : document.createElement('ul');
+    if (block.ordered && block.start !== 1) list.start = block.start;
+    for (const item of block.items) {
+      const entry = document.createElement('li');
+      appendInline(entry, item.children);
+      for (const nested of item.nested) appendBlock(entry, nested);
+      list.append(entry);
+    }
+    parent.append(list);
+    return;
+  }
+
+  const scroll = document.createElement('div');
+  scroll.className = 'markdown-table-scroll';
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const headerRow = document.createElement('tr');
+  const columnCount = Math.max(block.headers.length, block.alignments.length);
+
+  for (let column = 0; column < columnCount; column += 1) {
+    const th = document.createElement('th');
+    th.className = `align-${block.alignments[column] ?? 'left'}`;
+    appendInline(th, block.headers[column] ?? []);
+    headerRow.append(th);
+  }
+
+  thead.append(headerRow);
+  table.append(thead);
+
+  const tbody = document.createElement('tbody');
+  for (const row of block.rows) {
+    const tr = document.createElement('tr');
+    for (let column = 0; column < columnCount; column += 1) {
+      const td = document.createElement('td');
+      td.className = `align-${block.alignments[column] ?? 'left'}`;
+      appendInline(td, row[column] ?? []);
+      tr.append(td);
+    }
+    tbody.append(tr);
+  }
+
+  table.append(tbody);
+  scroll.append(table);
+  parent.append(scroll);
+}
+
+export function renderMarkdownInto(container: HTMLElement, markdown: string): void {
+  container.replaceChildren();
+  for (const block of parseMarkdown(markdown)) appendBlock(container, block);
 }
