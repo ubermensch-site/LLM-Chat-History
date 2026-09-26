@@ -813,8 +813,17 @@ function openSelectedOriginal(): void {
 }
 
 async function copySelectedConversationMarkdown(): Promise<void> {
-  const bundle = await currentBundle();
-  const markdown = renderMarkdownExport({ ...bundle, exportedAt: new Date().toISOString() });
+  const record = selectedRecord();
+  if (!record) return;
+
+  const markdown = renderMarkdownExport({
+    conversation: record.conversation,
+    messages: record.messages,
+    events: [],
+    project: record.project ?? null,
+    exportedAt: new Date().toISOString()
+  });
+
   await navigator.clipboard.writeText(markdown);
   setLibraryStatus('Conversation copied as Markdown.');
 }
