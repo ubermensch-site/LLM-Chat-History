@@ -89,14 +89,19 @@ describe('ChatGPT role discovery compatibility', () => {
     ).toBe('assistant');
   });
 
-  it('tries explicit turn shells before semantic role fallbacks', () => {
+  it('tries legacy shells, then grouped keyed exchanges, then semantic fallbacks', () => {
     expect(TURN_DISCOVERY_STRATEGIES.map((strategy) => strategy.id)).toEqual([
       'turn-shells',
+      'keyed-exchanges',
       'semantic-roles'
     ]);
-    expect(TURN_DISCOVERY_STRATEGIES[1]?.selectors).toContain('[data-user-message-bubble]');
-    expect(TURN_DISCOVERY_STRATEGIES[1]?.selectors).toContain(
+    expect(TURN_DISCOVERY_STRATEGIES[1]?.selectors).toContain('[data-turn-key]');
+    expect(TURN_DISCOVERY_STRATEGIES[2]?.selectors).toContain('[data-user-message-bubble]');
+    expect(TURN_DISCOVERY_STRATEGIES[2]?.selectors).toContain(
       '[data-conversation-role="assistant"]'
+    );
+    expect(TURN_DISCOVERY_STRATEGIES[2]?.selectors).toContain(
+      '[data-chatgpt-agent-turn-start]'
     );
   });
 });
