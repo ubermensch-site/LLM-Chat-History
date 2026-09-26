@@ -17,7 +17,7 @@ export function conversationPreview(
   const latest = [...messages]
     .reverse()
     .find((message) =>
-      compactWhitespace(message.markdown ?? message.plainText).length > 0
+      compactWhitespace(message.markdown?.trim() || message.plainText).length > 0
     );
 
   if (!latest) {
