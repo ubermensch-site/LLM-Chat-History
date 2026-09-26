@@ -1086,6 +1086,14 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
     true,
     'code block copy action must be visible'
   );
+  assert.ok(
+    Number(
+      await driverPage
+        .locator('#transcript .assistant .message-actions')
+        .evaluate((element) => getComputedStyle(element).opacity)
+    ) >= 0.6,
+    'message actions must remain discoverable without hover'
+  );
   assert.equal(
     await driverPage.locator('#transcript .assistant .markdown-content blockquote').count(),
     1,
