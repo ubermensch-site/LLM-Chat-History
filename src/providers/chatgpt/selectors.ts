@@ -1,18 +1,9 @@
 export const CHATGPT_HOSTS = new Set(['chatgpt.com', 'chat.openai.com']);
 
-/**
- * Ordered from the most explicit legacy/current turn shells to semantic nodes in
- * ChatGPT's keyed renderer. Keep these selectors centralized: provider DOM is an
- * external contract and is expected to drift.
- */
 export const TURN_SHELL_SELECTORS = [
   'section[data-turn="user"], section[data-turn="assistant"]',
   'article[data-turn="user"], article[data-turn="assistant"]',
-  '[data-testid^="conversation-turn-"][data-turn]',
-  '[data-testid^="conversation-turn-"][data-message-author-role]',
-  '[data-testid^="conversation-turn-"]:has([data-message-author-role])',
-  '[data-turn-key] [data-user-message-bubble]',
-  '[data-turn-key] [data-conversation-role="assistant"]'
+  '[data-testid^="conversation-turn-"]'
 ] as const;
 
 export const ROLE_FALLBACK_SELECTORS = [
@@ -23,8 +14,11 @@ export const ROLE_FALLBACK_SELECTORS = [
   '[data-conversation-role="assistant"]'
 ] as const;
 
-// Compatibility export for the current adapter while role discovery is migrated
-// to the multi-strategy contract above.
+export const TURN_DISCOVERY_STRATEGIES = [
+  { id: 'turn-shells', selectors: TURN_SHELL_SELECTORS },
+  { id: 'semantic-roles', selectors: ROLE_FALLBACK_SELECTORS }
+] as const;
+
 export const ROLE_FALLBACK_SELECTOR = ROLE_FALLBACK_SELECTORS.join(', ');
 
 export const ASSISTANT_CONTENT_SELECTORS = [
