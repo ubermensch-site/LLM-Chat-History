@@ -45,6 +45,7 @@ import {
   type LibraryNavigationScope
 } from './library-navigation-state';
 import { requestMirrorRefresh, requestMirrorRefreshes } from './mirror-refresh';
+import { conversationPreviewText } from './conversation-preview';
 import { renderMarkdownInto } from './markdown-renderer';
 import { filterLibraryRecords, type LibraryRecord } from './search';
 
@@ -438,14 +439,11 @@ function conversationButton(record: LibraryRecord): HTMLButtonElement {
   const location = folder ? `${record.project?.name} / ${folder.name}` : record.project?.name ?? 'Unsorted';
   const preview = document.createElement('span');
   preview.className = 'conversation-preview';
-  const latestMessage = record.messages.at(-1)?.plainText
-    .replace(/\s+/g, ' ')
-    .trim();
-  preview.textContent = latestMessage
-    ? latestMessage.length > 92
-      ? `${latestMessage.slice(0, 89)}…`
-      : latestMessage
-    : 'No message preview yet';
+  const latestMessage = record.messages.at(-1);
+  preview.textContent = conversationPreviewText(
+    latestMessage?.markdown,
+    latestMessage?.plainText
+  );
 
   const details = document.createElement('span');
   details.className = 'conversation-meta';
