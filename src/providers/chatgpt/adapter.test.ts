@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeVisibleModelLabel, parseChatGptConversationId } from './adapter';
+import { inferChatGptTurnRole, normalizeVisibleModelLabel, parseChatGptConversationId } from './adapter';
+import { TURN_DISCOVERY_STRATEGIES } from './selectors';
 
 describe('parseChatGptConversationId', () => {
   it('reads a standard ChatGPT conversation id', () => {
@@ -38,5 +39,53 @@ describe('rendered content policy', () => {
   it('keeps transport/status text visible in the provider transcript', () => {
     const rendered = 'Connection interrupted. Waiting for the complete answer';
     expect(rendered).toContain('Connection interrupted');
+  });
+});
+
+
+describe('ChatGPT role discovery compatibility', () => {
+  it('preserves legacy data-turn and message-author-role signals', () => {
+    expect(inferChatGptTurnRole({ dataTurn: 'user' })).toBe('user');
+    expect(inferChatGptTurnRole({ dataTurn: 'assistant' })).toBe('assistant');
+    expect(inferChatGptTurnRole({ messageAuthorRole: 'user' })).toBe('user');
+    expect(inferChatGptTurnRole({ messageAuthorRole: 'assistant' })).toBe('assistant');
+  });
+
+  it('recognizes alternate semantic role attributes', () => {
+    expect(inferChatGptTurnRole({ dataRole: 'user' })).toBe('user');
+    expect(inferChatGptTurnRole({ dataRole: 'assistant' })).toBe('assistant');
+    expect(inferChatGptTurnRole({ messageAuthor: 'user' })).toBe('user');
+    expect(inferChatGptTurnRole({ messageAuthor: 'assistant' })).toBe('assistant');
+  });
+
+  it('recognizes keyed-renderer user and assistant signals', () => {
+    expect(inferChatGptTurnRole({ userMessageBubble: true })).toBe('user');
+    expect(inferChatGptTurnRole({ conversationRole: 'assistant' })).toBe('assistant');
+  });
+
+  it('returns null for unknown or unrelated role values', () => {
+    expect(inferChatGptTurnRole({})).toBeNull();
+    expect(inferChatGptTurnRole({ dataRole: 'button' })).toBeNull();
+    expect(inferChatGptTurnRole({ conversationRole: 'tool' })).toBeNull();
+  });
+
+  it('prefers explicit role attributes over the user-bubble fallback', () => {
+    expect(
+      inferChatGptTurnRole({
+        dataTurn: 'assistant',
+        userMessageBubble: true
+      })
+    ).toBe('assistant');
+  });
+
+  it('tries explicit turn shells before semantic role fallbacks', () => {
+    expect(TURN_DISCOVERY_STRATEGIES.map((strategy) => strategy.id)).toEqual([
+      'turn-shells',
+      'semantic-roles'
+    ]);
+    expect(TURN_DISCOVERY_STRATEGIES[1]?.selectors).toContain('[data-user-message-bubble]');
+    expect(TURN_DISCOVERY_STRATEGIES[1]?.selectors).toContain(
+      '[data-conversation-role="assistant"]'
+    );
   });
 });
