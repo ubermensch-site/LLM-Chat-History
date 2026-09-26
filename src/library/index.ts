@@ -621,26 +621,29 @@ async function togglePinSelectedConversation(): Promise<void> {
 async function shareSelectedConversation(): Promise<void> {
   const record = selectedRecord();
   if (!record) return;
-  const conversation = record.conversation;
-  const name = conversationDisplayTitle(conversation);
-  const sourceUrl = conversation.sourceUrl;
+
+  const bundle = await currentBundle();
+  const name = conversationDisplayTitle(bundle.conversation);
+  const markdown = renderMarkdownExport({
+    ...bundle,
+    exportedAt: new Date().toISOString()
+  });
 
   if (navigator.share) {
     try {
       await navigator.share({
         title: name,
-        text: `AI Chat History: ${name}`,
-        url: sourceUrl
+        text: markdown
       });
-      setLibraryStatus('Share sheet opened.');
+      setLibraryStatus('Conversation shared.');
       return;
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
     }
   }
 
-  await navigator.clipboard.writeText(sourceUrl);
-  setLibraryStatus('Original conversation link copied.');
+  await navigator.clipboard.writeText(markdown);
+  setLibraryStatus('Conversation copied as Markdown.');
 }
 
 function toggleOrganizer(): void {
