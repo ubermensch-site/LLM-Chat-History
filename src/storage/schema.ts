@@ -46,6 +46,8 @@ export interface ArchiveConversation {
   sourceUrl: string;
   title: string | null;
   customTitle?: string;
+  favoriteAt?: string;
+  pinnedAt?: string;
   archivedAt?: string;
   projectId?: string;
   folderId?: string;
