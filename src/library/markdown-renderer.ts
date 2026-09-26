@@ -497,12 +497,37 @@ function appendBlock(parent: HTMLElement, block: MarkdownBlock): void {
     const wrapper = document.createElement('div');
     wrapper.className = 'code-block';
 
-    if (block.language) {
-      const label = document.createElement('div');
-      label.className = 'code-block-label';
-      label.textContent = block.language;
-      wrapper.append(label);
-    }
+    const toolbar = document.createElement('div');
+    toolbar.className = 'code-block-toolbar';
+
+    const language = document.createElement('span');
+    language.className = 'code-block-language';
+    language.textContent = block.language || 'code';
+
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'code-copy-button';
+    copy.textContent = 'Copy';
+    copy.setAttribute('aria-label', 'Copy code block');
+    copy.addEventListener('click', () => {
+      void navigator.clipboard.writeText(block.value).then(
+        () => {
+          copy.textContent = 'Copied';
+          window.setTimeout(() => {
+            copy.textContent = 'Copy';
+          }, 1200);
+        },
+        () => {
+          copy.textContent = 'Copy failed';
+          window.setTimeout(() => {
+            copy.textContent = 'Copy';
+          }, 1600);
+        }
+      );
+    });
+
+    toolbar.append(language, copy);
+    wrapper.append(toolbar);
 
     const pre = document.createElement('pre');
     const code = document.createElement('code');
