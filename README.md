@@ -1,8 +1,8 @@
-# LLM Chat History
+# AI Chat History
 
-LLM Chat History is a local-first browser extension for automatically archiving conversations across AI chat providers while keeping users in control of what is recorded, stored, exported, and synced.
+AI Chat History is a local-first browser extension for automatically archiving conversations across AI chat providers while keeping users in control of what is recorded, stored, exported, and synced.
 
-> **Working name:** the product may be renamed later without changing the architecture.
+> Repository note: the code repository is still named `LLM-Chat-History` after its transfer into the `aichathistory` organization. Product policy and cross-repository ownership are canonical in [aichathistory/aichathistory](https://github.com/aichathistory/aichathistory).
 
 ## Product direction
 
