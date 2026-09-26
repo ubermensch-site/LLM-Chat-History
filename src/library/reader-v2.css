@@ -608,3 +608,128 @@
     min-width: 26rem;
   }
 }
+
+
+/* Reader v2.1 refinement — protect conversation identity from action-toolbar crowding. */
+.topbar .premium-topbar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 0.72rem;
+}
+
+.topbar .heading {
+  width: min(100%, 58rem);
+}
+
+.topbar .heading h1 {
+  max-width: 100%;
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.topbar .conversation-action-block {
+  width: 100%;
+  justify-items: stretch;
+}
+
+.topbar .conversation-toolbar {
+  justify-content: flex-start;
+}
+
+.topbar .library-status {
+  justify-self: start;
+  text-align: left;
+}
+
+.message.assistant {
+  scroll-margin-top: 9rem;
+}
+
+.message.assistant .message-body {
+  padding-bottom: 0.15rem;
+}
+
+.markdown-content p + p {
+  margin-top: 1rem;
+}
+
+.markdown-content h1 + p,
+.markdown-content h2 + p,
+.markdown-content h3 + p,
+.markdown-content h4 + p,
+.markdown-content h5 + p,
+.markdown-content h6 + p {
+  margin-top: 0.42rem;
+}
+
+.markdown-content p + ul,
+.markdown-content p + ol,
+.markdown-content ul + p,
+.markdown-content ol + p {
+  margin-top: 0.95rem;
+}
+
+.code-block-toolbar {
+  min-height: 2.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0 0.7rem 0 0.82rem;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-quiet) 88%, var(--surface-raised));
+}
+
+.code-block-label {
+  min-height: auto;
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
+}
+
+.code-block-language {
+  color: var(--ink-subtle);
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.025em;
+  text-transform: lowercase;
+}
+
+.code-copy-button {
+  min-height: 1.72rem;
+  padding: 0 0.48rem;
+  border: 1px solid transparent;
+  border-radius: 0.42rem;
+  background: transparent;
+  color: var(--ink-subtle);
+  font: inherit;
+  font-size: 0.62rem;
+  font-weight: 650;
+}
+
+.code-copy-button:hover,
+.code-copy-button:focus-visible {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  color: var(--ink);
+}
+
+@media (max-width: 760px) {
+  .topbar .heading {
+    width: 100%;
+  }
+
+  .topbar .heading h1 {
+    -webkit-line-clamp: 3;
+  }
+
+  .topbar .conversation-toolbar {
+    justify-content: flex-start;
+  }
+}
