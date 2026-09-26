@@ -106,6 +106,25 @@ describe('Library filter state', () => {
       .toEqual(['Newest', 'Older']);
   });
 
+  it('keeps pinned conversations above unpinned records without losing deterministic sort order', () => {
+    const pinnedRecords: LibraryRecord[] = [
+      records[0]!,
+      {
+        ...records[1]!,
+        conversation: {
+          ...records[1]!.conversation,
+          pinnedAt: '2026-09-19T10:00:00.000Z'
+        }
+      }
+    ];
+
+    expect(
+      filterAndSortLibraryRecords(pinnedRecords, { ...base, sort: 'newest' }).map(
+        (record) => record.conversation.id
+      )
+    ).toEqual(['Older', 'Newest']);
+  });
+
   it('counts only filters, not sorting, as active constraints', () => {
     expect(activeLibraryFilterCount({ ...base, sort: 'title' })).toBe(0);
     expect(activeLibraryFilterCount({ ...base, providerId: 'chatgpt', date: '7d', sort: 'title' })).toBe(2);
