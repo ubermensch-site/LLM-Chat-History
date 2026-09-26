@@ -45,7 +45,7 @@ import {
   type LibraryNavigationScope
 } from './library-navigation-state';
 import { requestMirrorRefresh, requestMirrorRefreshes } from './mirror-refresh';
-import { renderMarkdownToSafeHtml } from './markdown-renderer';
+import { renderMarkdownInto } from './markdown-renderer';
 import { filterLibraryRecords, type LibraryRecord } from './search';
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -345,7 +345,7 @@ function renderTranscript(record: LibraryRecord): void {
     const capturedMarkdown = message.markdown?.trim();
     if (capturedMarkdown) {
       content.classList.add('markdown-content');
-      content.innerHTML = renderMarkdownToSafeHtml(capturedMarkdown);
+      renderMarkdownInto(content, capturedMarkdown);
     } else {
       content.textContent = message.plainText || '(empty rendered message)';
     }
