@@ -23,6 +23,10 @@ export const ROLE_FALLBACK_SELECTORS = [
   '[data-conversation-role="assistant"]'
 ] as const;
 
+// Compatibility export for the current adapter while role discovery is migrated
+// to the multi-strategy contract above.
+export const ROLE_FALLBACK_SELECTOR = ROLE_FALLBACK_SELECTORS.join(', ');
+
 export const ASSISTANT_CONTENT_SELECTORS = [
   '.markdown',
   '.prose',
