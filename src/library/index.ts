@@ -93,6 +93,7 @@ const organizeButton = byId<HTMLButtonElement>('organize-chat');
 const findButton = byId<HTMLButtonElement>('find-chat');
 const pinButton = byId<HTMLButtonElement>('pin-chat');
 const openOriginalButton = byId<HTMLButtonElement>('open-original');
+const copyConversationMarkdownButton = byId<HTMLButtonElement>('copy-chat-markdown');
 const downloadJson = byId<HTMLButtonElement>('download-json');
 const organizerPanel = byId<HTMLDetailsElement>('organizer-panel');
 const findBar = byId<HTMLDivElement>('conversation-findbar');
@@ -286,6 +287,7 @@ function renderManagementActions(): void {
   findButton.disabled = disabled;
   pinButton.disabled = disabled;
   openOriginalButton.disabled = disabled;
+  copyConversationMarkdownButton.disabled = disabled;
   downloadJson.disabled = disabled;
 
   const favorited = Boolean(record?.conversation.favoriteAt);
@@ -810,6 +812,13 @@ function openSelectedOriginal(): void {
   window.open(record.conversation.sourceUrl, '_blank', 'noopener,noreferrer');
 }
 
+async function copySelectedConversationMarkdown(): Promise<void> {
+  const bundle = await currentBundle();
+  const markdown = renderMarkdownExport({ ...bundle, exportedAt: new Date().toISOString() });
+  await navigator.clipboard.writeText(markdown);
+  setLibraryStatus('Conversation copied as Markdown.');
+}
+
 async function toggleArchiveSelectedConversation(): Promise<void> {
   const record = selectedRecord();
   if (!record) return;
@@ -1044,6 +1053,9 @@ findClose.addEventListener('click', () => {
 });
 pinButton.addEventListener('click', () => runAction(togglePinSelectedConversation));
 openOriginalButton.addEventListener('click', openSelectedOriginal);
+copyConversationMarkdownButton.addEventListener('click', () =>
+  runAction(copySelectedConversationMarkdown)
+);
 organizerPanel.addEventListener('toggle', () => {
   organizeButton.setAttribute('aria-expanded', String(organizerPanel.open));
 });
