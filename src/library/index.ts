@@ -340,7 +340,8 @@ function renderTranscript(record: LibraryRecord): void {
 
     const role = document.createElement('span');
     role.className = 'role';
-    role.textContent = message.role === 'user' ? 'You' : 'ChatGPT';
+    role.textContent =
+      message.role === 'user' ? 'You' : providerLabel(conversation.providerId);
 
     const time = document.createElement('time');
     time.className = 'time';
