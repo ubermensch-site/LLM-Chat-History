@@ -111,10 +111,21 @@ function roleFor(element: Element): TurnRole | null {
   const direct = directRoleFor(element);
   if (direct) return direct;
 
-  for (const candidate of element.querySelectorAll(ROLE_FALLBACK_SELECTOR)) {
-    const role = directRoleFor(candidate);
-    if (role) return role;
-  }
+  // In the keyed renderer a turn container can contain several semantic
+  // descendants (labels, controls and message content). Do not let whichever
+  // descendant happens to appear first in DOM order decide the turn role.
+  // A real user-message bubble is the strongest current user signal.
+  if (element.querySelector('[data-user-message-bubble]')) return 'user';
+
+  const explicitUser = element.querySelector(
+    '[data-message-author-role="user"], [data-role="user"], [data-message-author="user"]'
+  );
+  if (explicitUser) return 'user';
+
+  const explicitAssistant = element.querySelector(
+    '[data-message-author-role="assistant"], [data-role="assistant"], [data-message-author="assistant"], [data-conversation-role="assistant"]'
+  );
+  if (explicitAssistant) return 'assistant';
 
   return null;
 }
@@ -164,11 +175,23 @@ function messageNodeFor(element: Element, role: TurnRole): Element | null {
     return element;
   }
 
-  for (const candidate of element.querySelectorAll(ROLE_FALLBACK_SELECTOR)) {
-    if (directRoleFor(candidate) === role) return candidate;
+  if (role === 'user') {
+    return (
+      element.querySelector('[data-user-message-bubble]') ??
+      element.querySelector('[data-message-author-role="user"]') ??
+      element.querySelector('[data-role="user"]') ??
+      element.querySelector('[data-message-author="user"]') ??
+      (directRoleFor(element) === 'user' ? element : null)
+    );
   }
 
-  return directRoleFor(element) === role ? element : null;
+  return (
+    element.querySelector('[data-message-author-role="assistant"]') ??
+    element.querySelector('[data-role="assistant"]') ??
+    element.querySelector('[data-message-author="assistant"]') ??
+    element.querySelector('[data-conversation-role="assistant"]') ??
+    (directRoleFor(element) === 'assistant' ? element : null)
+  );
 }
 
 function closestAttribute(element: Element, attribute: string): string | null {
@@ -204,7 +227,11 @@ function assistantAnswerNodeFor(element: Element): Element | null {
 
 function contentNodeFor(element: Element, role: TurnRole): Element | null {
   const roleNode = messageNodeFor(element, role) ?? element;
-  if (role === 'assistant') return assistantAnswerNodeFor(element) ?? roleNode;
+  if (role === 'assistant') {
+    // Never fall back to the assistant role/accessibility marker itself:
+    // that is how the live build captured "ChatGPT said:" as message content.
+    return assistantAnswerNodeFor(element);
+  }
   return queryFirst(roleNode, USER_CONTENT_SELECTORS) ?? roleNode;
 }
 
@@ -384,6 +411,12 @@ export class ChatGptAdapter implements ProviderAdapter {
       const answerNode = role === 'assistant' ? assistantAnswerNodeFor(element) : null;
       const plainText = normalizedText(contentNode);
       const renderedMarkdown = contentNode ? renderDomAsMarkdown(contentNode) : '';
+
+      // A semantic role marker without rendered message content is not a
+      // conversation turn. Skipping it is safer than persisting accessibility
+      // labels as transcript text.
+      if (!contentNode || (!plainText && !renderedMarkdown)) return;
+
       const visibleActivities =
         role === 'assistant'
           ? visibleActivitiesFor(element, answerNode, providerTurnId, observedAt)
