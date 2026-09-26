@@ -31,6 +31,8 @@ function bundle(): ArchiveExportBundle {
     projectId: project.id,
     folderId: project.folders[0]!.id,
     tags: ['Evidence', 'Urgent'],
+    favoriteAt: '2026-09-16T19:03:30.000Z',
+    pinnedAt: '2026-09-16T19:03:45.000Z',
     createdAt: '2026-09-16T19:02:00.000Z',
     updatedAt: '2026-09-16T19:04:00.000Z',
     lastObservedAt: '2026-09-16T19:04:00.000Z',
@@ -105,6 +107,8 @@ describe('project organization integration', () => {
     expect(conversation?.projectId).toBe(source.project?.id);
     expect(conversation?.folderId).toBe(source.project?.folders[0]?.id);
     expect(conversation?.tags).toEqual(['Evidence', 'Urgent']);
+    expect(conversation?.favoriteAt).toBe(source.conversation.favoriteAt);
+    expect(conversation?.pinnedAt).toBe(source.conversation.pinnedAt);
     db.close();
   });
 });
