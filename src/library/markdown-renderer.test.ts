@@ -65,12 +65,20 @@ const answer = 42;
     });
 
     const safe = blocks[1];
-    expect(safe).toMatchObject({
-      type: 'paragraph',
-      children: [expect.objectContaining({ type: 'link', target: 'https://example.com/docs' })]
+    expect(safe?.type).toBe('paragraph');
+    const links =
+      safe?.type === 'paragraph'
+        ? safe.children.filter((child) => child.type === 'link')
+        : [];
+    expect(links).toHaveLength(1);
+    expect(links[0]).toMatchObject({
+      type: 'link',
+      target: 'https://example.com/docs'
     });
 
     const serialized = JSON.stringify(blocks);
+    expect(serialized).toContain('Unsafe');
+    expect(serialized).toContain('Relative');
     expect(serialized).not.toContain('"target":"javascript:');
     expect(serialized).not.toContain('"target":"/private"');
   });
