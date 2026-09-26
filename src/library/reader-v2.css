@@ -767,3 +767,137 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
 }
+
+
+/* In-conversation find */
+.conversation-findbar {
+  width: min(100%, calc(var(--reader-thread-width) + (2 * var(--space-5))));
+  margin: 0.75rem auto 0;
+  padding: 0.5rem;
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) auto auto;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.conversation-findbar[hidden] {
+  display: none;
+}
+
+.conversation-find-field {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.2rem;
+  padding: 0 0.68rem;
+  border: 1px solid var(--border);
+  border-radius: 0.62rem;
+  background: var(--surface-quiet);
+}
+
+.conversation-find-icon {
+  color: var(--ink-subtle);
+  font-size: 0.9rem;
+}
+
+.conversation-find-field input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.conversation-find-field input::placeholder {
+  color: var(--ink-subtle);
+}
+
+.conversation-find-field:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.conversation-find-count {
+  min-width: 4.5rem;
+  color: var(--ink-subtle);
+  font-size: 0.7rem;
+  font-weight: 650;
+  text-align: center;
+}
+
+.conversation-find-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.18rem;
+}
+
+.conversation-find-actions button {
+  width: 2rem;
+  height: 2rem;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--ink-muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.conversation-find-actions button:hover:not(:disabled),
+.conversation-find-actions button:focus-visible {
+  border-color: var(--border);
+  background: var(--surface-quiet);
+  color: var(--ink);
+}
+
+.conversation-find-actions button:disabled {
+  opacity: 0.35;
+}
+
+.conversation-find-mark {
+  padding: 0.04em 0.08em;
+  border-radius: 0.16rem;
+  background: color-mix(in srgb, #f4c542 58%, transparent);
+  color: inherit;
+}
+
+.conversation-find-mark.current {
+  outline: 2px solid color-mix(in srgb, var(--accent) 68%, transparent);
+  outline-offset: 1px;
+  background: color-mix(in srgb, #f4c542 84%, transparent);
+}
+
+.message.find-current-message {
+  scroll-margin-block: 7rem;
+}
+
+@media (max-width: 760px) {
+  .conversation-findbar {
+    width: calc(100% - (2 * var(--space-3)));
+    grid-template-columns: 1fr auto;
+    gap: 0.4rem;
+    margin-top: 0.55rem;
+  }
+
+  .conversation-find-count {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+    min-width: 0;
+    padding-left: 0.1rem;
+  }
+
+  .conversation-find-actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
