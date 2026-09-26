@@ -89,6 +89,28 @@ const answer = 42;
     ]);
   });
 
+  it('parses Markdown task lists as read-only checklist state', () => {
+    const blocks = parseMarkdown(`- [ ] Draft launch copy
+- [x] Verify release`);
+
+    expect(blocks).toMatchObject([
+      {
+        type: 'list',
+        ordered: false,
+        items: [
+          {
+            checked: false,
+            children: [{ type: 'text', value: 'Draft launch copy' }]
+          },
+          {
+            checked: true,
+            children: [{ type: 'text', value: 'Verify release' }]
+          }
+        ]
+      }
+    ]);
+  });
+
   it('turns image Markdown into a privacy-safe placeholder without retaining the remote source', () => {
     const blocks = parseMarkdown('![Generated chart](https://example.com/private.png)');
     expect(blocks).toMatchObject([
