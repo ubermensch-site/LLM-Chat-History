@@ -102,7 +102,6 @@ async function renderConversationContext(): Promise<void> {
   const project = conversation.projectId
     ? projects.find((entry) => entry.id === conversation.projectId)
     : undefined;
-  const status = conversationStatusLabel(conversation);
   const location = locationLabel(conversation, project);
   const updatedLabel = relativeConversationTime(conversation.lastObservedAt);
   const messageLabel = `${conversation.messageCount} ${conversation.messageCount === 1 ? 'message' : 'messages'}`;
@@ -111,21 +110,15 @@ async function renderConversationContext(): Promise<void> {
 
   const items: HTMLElement[] = [];
 
-  if (status) items.push(chip(status, 'status'));
-  if (location) {
-    if (items.length) items.push(separator());
-    items.push(chip(location));
-  }
+  if (location) items.push(chip(location));
   if (conversation.archivedAt) {
     if (items.length) items.push(separator());
     items.push(chip('Archived', 'status', `Archived ${fullDate(conversation.archivedAt)}`));
   }
   for (const tag of (conversation.tags ?? []).slice(0, 4)) items.push(chip(`#${tag}`, 'tag'));
-  if (items.length) items.push(separator());
-  items.push(chip('Local copy'));
 
   context.replaceChildren(...items);
-  context.hidden = false;
+  context.hidden = items.length === 0;
 }
 
 function enhanceTurnHeaders(): void {
