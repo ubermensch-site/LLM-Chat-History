@@ -1145,6 +1145,43 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
     'desktop conversation title must wrap instead of using nowrap ellipsis'
   );
 
+  await driverPage.keyboard.press('Control+F');
+  assert.equal(
+    await driverPage.locator('#conversation-findbar').isVisible(),
+    true,
+    'Ctrl/Cmd+F must open in-conversation find'
+  );
+  assert.equal(
+    await driverPage
+      .locator('#conversation-find-input')
+      .evaluate((element) => document.activeElement === element),
+    true,
+    'in-conversation find input must receive focus'
+  );
+  await driverPage.locator('#conversation-find-input').fill('item');
+  await driverPage.locator('#conversation-find-input').dispatchEvent('input');
+  await driverPage.waitForFunction(
+    () => document.querySelectorAll('#transcript .conversation-find-mark').length === 2
+  );
+  assert.equal(await driverPage.locator('#conversation-find-count').innerText(), '1 / 2');
+  assert.equal(
+    await driverPage.locator('#transcript .conversation-find-mark.current').innerText(),
+    'item'
+  );
+
+  await driverPage.keyboard.press('Enter');
+  assert.equal(await driverPage.locator('#conversation-find-count').innerText(), '2 / 2');
+  await driverPage.keyboard.press('Shift+Enter');
+  assert.equal(await driverPage.locator('#conversation-find-count').innerText(), '1 / 2');
+
+  await driverPage.keyboard.press('Escape');
+  assert.equal(await driverPage.locator('#conversation-findbar').isHidden(), true);
+  assert.equal(
+    await driverPage.locator('#transcript .conversation-find-mark').count(),
+    0,
+    'closing find must restore the normal transcript DOM'
+  );
+
   await driverPage.keyboard.press('Control+K');
   assert.equal(await driverPage.locator('#search').evaluate((element) => document.activeElement === element), true);
   await driverPage.keyboard.type('unique searchable assistant phrase');
