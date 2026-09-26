@@ -52,7 +52,8 @@ const records: LibraryRecord[] = [
     conversation: conversation('organized', {
       projectId: project.id,
       folderId: 'folder:research',
-      tags: ['Research', 'Follow Up']
+      tags: ['Research', 'Follow Up'],
+      favoriteAt: '2026-09-18T00:02:00.000Z'
     }),
     messages: [],
     project,
@@ -80,6 +81,7 @@ describe('Library navigation state', () => {
   it('matches real archive scopes without mixing archived conversations into active views', () => {
     expect(records.filter((record) => recordMatchesNavigationScope(record, { kind: 'library' }))).toHaveLength(2);
     expect(records.filter((record) => recordMatchesNavigationScope(record, { kind: 'archived' }))).toHaveLength(1);
+    expect(records.filter((record) => recordMatchesNavigationScope(record, { kind: 'favorites' }))).toHaveLength(1);
     expect(records.filter((record) => recordMatchesNavigationScope(record, { kind: 'unsorted' }))).toHaveLength(1);
     expect(records.filter((record) => recordMatchesNavigationScope(record, { kind: 'project', projectId: project.id }))).toHaveLength(1);
     expect(records.filter((record) => recordMatchesNavigationScope(record, {
@@ -104,11 +106,13 @@ describe('Library navigation state', () => {
       { id: 'research', name: 'Research', count: 2 }
     ]);
     expect(facets.checkpointCount).toBe(1);
+    expect(facets.favoriteCount).toBe(1);
   });
 
   it('maps scoped selections back to the correct Browse section and project selector', () => {
     expect(navigationSection({ kind: 'folder', projectId: project.id, folderId: 'folder:research' })).toBe('folders');
     expect(navigationSection({ kind: 'tag', tag: 'Research' })).toBe('tags');
+    expect(navigationSection({ kind: 'favorites' })).toBe('favorites');
     expect(navigationScopeProjectId({ kind: 'project', projectId: project.id })).toBe(project.id);
     expect(navigationScopeProjectId({ kind: 'tag', tag: 'Research' })).toBe('all');
   });
