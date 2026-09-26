@@ -51,6 +51,25 @@ function backtickRun(source: string, start: number): number {
   return length;
 }
 
+function findClosingParen(source: string, from: number): number {
+  let depth = 1;
+  for (let index = from; index < source.length; index += 1) {
+    if (source[index] === '\\') {
+      index += 1;
+      continue;
+    }
+    if (source[index] === '(') {
+      depth += 1;
+      continue;
+    }
+    if (source[index] === ')') {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
 function pushText(nodes: MarkdownInlineNode[], value: string): void {
   if (!value) return;
   const previous = nodes.at(-1);
@@ -88,7 +107,7 @@ export function parseMarkdownInline(source: string): MarkdownInlineNode[] {
     if (source.startsWith('![', index)) {
       const labelEnd = findUnescaped(source, ']', index + 2);
       if (labelEnd !== -1 && source[labelEnd + 1] === '(') {
-        const targetEnd = findUnescaped(source, ')', labelEnd + 2);
+        const targetEnd = findClosingParen(source, labelEnd + 2);
         if (targetEnd !== -1) {
           nodes.push({
             type: 'image-placeholder',
@@ -103,7 +122,7 @@ export function parseMarkdownInline(source: string): MarkdownInlineNode[] {
     if (character === '[') {
       const labelEnd = findUnescaped(source, ']', index + 1);
       if (labelEnd !== -1 && source[labelEnd + 1] === '(') {
-        const targetEnd = findUnescaped(source, ')', labelEnd + 2);
+        const targetEnd = findClosingParen(source, labelEnd + 2);
         if (targetEnd !== -1) {
           const label = parseMarkdownInline(source.slice(index + 1, labelEnd));
           const target = safeLinkTarget(source.slice(labelEnd + 2, targetEnd));
