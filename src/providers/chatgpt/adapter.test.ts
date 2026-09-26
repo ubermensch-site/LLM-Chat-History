@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  chatGptProviderTurnId,
   inferChatGptContainerRole,
+  inferChatGptKeyedRoles,
   inferChatGptTurnRole,
   normalizeVisibleModelLabel,
   parseChatGptConversationId
@@ -151,5 +153,75 @@ describe('ChatGPT keyed turn role precedence', () => {
 
   it('returns null when the keyed container has no recognized role signal', () => {
     expect(inferChatGptContainerRole({})).toBeNull();
+  });
+});
+
+
+describe('ChatGPT grouped keyed exchange contract', () => {
+  it('emits both logical roles when one keyed exchange contains user and assistant signals', () => {
+    expect(
+      inferChatGptKeyedRoles({
+        userMessageBubblePresent: true,
+        assistantRolePresent: true,
+        assistantStartPresent: true,
+        assistantContentUnitPresent: true,
+        assistantMessageBodyPresent: true
+      })
+    ).toEqual(['user', 'assistant']);
+  });
+
+  it('emits only user when the assistant half is not mounted yet', () => {
+    expect(
+      inferChatGptKeyedRoles({
+        userMessageBubblePresent: true
+      })
+    ).toEqual(['user']);
+  });
+
+  it('emits assistant when only the assistant half is mounted', () => {
+    expect(
+      inferChatGptKeyedRoles({
+        assistantMessageBodyPresent: true
+      })
+    ).toEqual(['assistant']);
+  });
+
+  it('assigns different stable IDs to user and assistant halves of one keyed exchange', () => {
+    const key = 'exchange-123';
+    expect(
+      chatGptProviderTurnId({
+        role: 'user',
+        turnKey: key,
+        index: 0
+      })
+    ).toBe('group:user:exchange-123');
+    expect(
+      chatGptProviderTurnId({
+        role: 'assistant',
+        turnKey: key,
+        index: 1
+      })
+    ).toBe('group:assistant:exchange-123');
+  });
+
+  it('falls back through legacy stable IDs before DOM order', () => {
+    expect(
+      chatGptProviderTurnId({
+        role: 'assistant',
+        turnId: 'legacy-turn',
+        providerMessageId: 'message-id',
+        testId: 'conversation-turn-1',
+        index: 4
+      })
+    ).toBe('legacy-turn');
+
+    expect(
+      chatGptProviderTurnId({
+        role: 'assistant',
+        providerMessageId: 'message-id',
+        testId: 'conversation-turn-1',
+        index: 4
+      })
+    ).toBe('message-id');
   });
 });
