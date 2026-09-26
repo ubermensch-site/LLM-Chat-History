@@ -56,6 +56,35 @@ export async function setConversationArchived(
   });
 }
 
+
+export async function setConversationFavorite(
+  db: IDBDatabase,
+  conversationId: string,
+  favorite: boolean,
+  updatedAt = new Date().toISOString()
+): Promise<ArchiveConversation> {
+  return updateConversation(db, conversationId, (existing) => {
+    const updated: ArchiveConversation = { ...existing, updatedAt };
+    if (favorite) updated.favoriteAt = updatedAt;
+    else delete updated.favoriteAt;
+    return updated;
+  });
+}
+
+export async function setConversationPinned(
+  db: IDBDatabase,
+  conversationId: string,
+  pinned: boolean,
+  updatedAt = new Date().toISOString()
+): Promise<ArchiveConversation> {
+  return updateConversation(db, conversationId, (existing) => {
+    const updated: ArchiveConversation = { ...existing, updatedAt };
+    if (pinned) updated.pinnedAt = updatedAt;
+    else delete updated.pinnedAt;
+    return updated;
+  });
+}
+
 export interface DeleteConversationResult {
   conversationId: string;
   messagesDeleted: number;
