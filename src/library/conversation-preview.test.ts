@@ -6,7 +6,8 @@ describe('conversationPreviewText', () => {
     expect(
       conversationPreviewText(
         'unique searchable assistant phrase\n\n## Reader structure\n\nStructured **Markdown** should stay readable.',
-        'unique searchable assistant phraseReader structureStructured Markdown should stay readable.'
+        'unique searchable assistant phraseReader structureStructured Markdown should stay readable.',
+        200
       )
     ).toBe(
       'unique searchable assistant phrase Reader structure Structured Markdown should stay readable.'
