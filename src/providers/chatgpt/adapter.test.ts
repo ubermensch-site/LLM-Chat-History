@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { inferChatGptTurnRole, normalizeVisibleModelLabel, parseChatGptConversationId } from './adapter';
+import {
+  inferChatGptContainerRole,
+  inferChatGptTurnRole,
+  normalizeVisibleModelLabel,
+  parseChatGptConversationId
+} from './adapter';
 import {
   ASSISTANT_CONTENT_SELECTORS,
   KEYED_TURN_SELECTOR,
@@ -104,5 +109,47 @@ describe('ChatGPT keyed-renderer extraction guards', () => {
     expect(ASSISTANT_CONTENT_SELECTORS).not.toContain(
       '[data-conversation-role="assistant"]'
     );
+  });
+});
+
+
+describe('ChatGPT keyed turn role precedence', () => {
+  it('prefers a real user bubble over assistant semantic markers in the same keyed container', () => {
+    expect(
+      inferChatGptContainerRole({
+        userMessageBubblePresent: true,
+        explicitAssistantPresent: true
+      })
+    ).toBe('user');
+  });
+
+  it('prefers explicit user evidence over assistant evidence', () => {
+    expect(
+      inferChatGptContainerRole({
+        explicitUserPresent: true,
+        explicitAssistantPresent: true
+      })
+    ).toBe('user');
+  });
+
+  it('uses assistant only when no user signal is present', () => {
+    expect(
+      inferChatGptContainerRole({
+        explicitAssistantPresent: true
+      })
+    ).toBe('assistant');
+  });
+
+  it('keeps a direct shell role authoritative', () => {
+    expect(
+      inferChatGptContainerRole({
+        directRole: 'assistant',
+        userMessageBubblePresent: true
+      })
+    ).toBe('assistant');
+  });
+
+  it('returns null when the keyed container has no recognized role signal', () => {
+    expect(inferChatGptContainerRole({})).toBeNull();
   });
 });
