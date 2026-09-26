@@ -417,6 +417,17 @@ function conversationButton(record: LibraryRecord): HTMLButtonElement {
 
   const folder = folderById(record.project, conversation.folderId);
   const location = folder ? `${record.project?.name} / ${folder.name}` : record.project?.name ?? 'Unsorted';
+  const preview = document.createElement('span');
+  preview.className = 'conversation-preview';
+  const latestMessage = record.messages.at(-1)?.plainText
+    .replace(/\s+/g, ' ')
+    .trim();
+  preview.textContent = latestMessage
+    ? latestMessage.length > 92
+      ? `${latestMessage.slice(0, 89)}…`
+      : latestMessage
+    : 'No message preview yet';
+
   const details = document.createElement('span');
   details.className = 'conversation-meta';
   details.textContent = `${location} · ${conversation.messageCount} messages · ${humanDate(conversation.updatedAt)}`;
@@ -430,7 +441,7 @@ function conversationButton(record: LibraryRecord): HTMLButtonElement {
   ].filter(Boolean).join(' · ');
   flags.textContent = flagText;
 
-  button.append(name, details);
+  button.append(name, preview, details);
   if (flagText) button.append(flags);
   button.addEventListener('click', () => selectConversation(conversation.id));
   return button;
