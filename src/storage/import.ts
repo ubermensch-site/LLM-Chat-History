@@ -102,6 +102,14 @@ function mergedConversation(
   if (customTitle) result.customTitle = customTitle;
   else delete result.customTitle;
 
+  const favoriteAt = existing.favoriteAt ?? imported.favoriteAt;
+  if (favoriteAt) result.favoriteAt = favoriteAt;
+  else delete result.favoriteAt;
+
+  const pinnedAt = existing.pinnedAt ?? imported.pinnedAt;
+  if (pinnedAt) result.pinnedAt = pinnedAt;
+  else delete result.pinnedAt;
+
   const archivedAt = existing.archivedAt ?? imported.archivedAt;
   if (archivedAt) result.archivedAt = archivedAt;
   else delete result.archivedAt;

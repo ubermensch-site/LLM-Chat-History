@@ -85,7 +85,64 @@ async function renderConversation(page, {
         }
         const answer = document.createElement('div');
         answer.className = 'markdown';
-        answer.textContent = turn.text;
+
+        if (turn.richFixture) {
+          const searchParagraph = document.createElement('p');
+          searchParagraph.textContent = turn.text;
+
+          const heading = document.createElement('h2');
+          heading.textContent = 'Reader structure';
+
+          const paragraph = document.createElement('p');
+          paragraph.append(
+            document.createTextNode('Structured '),
+            Object.assign(document.createElement('strong'), { textContent: 'Markdown' }),
+            document.createTextNode(' should stay readable.')
+          );
+
+          const list = document.createElement('ul');
+          for (const itemText of ['First item', 'Second item']) {
+            const item = document.createElement('li');
+            item.textContent = itemText;
+            list.append(item);
+          }
+
+          const pre = document.createElement('pre');
+          const code = document.createElement('code');
+          code.className = 'language-ts';
+          code.textContent = 'const formatted = true;';
+          pre.append(code);
+
+          const quote = document.createElement('blockquote');
+          const quoteParagraph = document.createElement('p');
+          quoteParagraph.textContent = 'Readable quote';
+          quote.append(quoteParagraph);
+
+          const table = document.createElement('table');
+          const thead = document.createElement('thead');
+          const headRow = document.createElement('tr');
+          for (const value of ['Name', 'Value']) {
+            const cell = document.createElement('th');
+            cell.textContent = value;
+            headRow.append(cell);
+          }
+          thead.append(headRow);
+
+          const tbody = document.createElement('tbody');
+          const bodyRow = document.createElement('tr');
+          for (const value of ['Status', 'Ready']) {
+            const cell = document.createElement('td');
+            cell.textContent = value;
+            bodyRow.append(cell);
+          }
+          tbody.append(bodyRow);
+
+          table.append(thead, tbody);
+          answer.append(searchParagraph, heading, paragraph, list, pre, quote, table);
+        } else {
+          answer.textContent = turn.text;
+        }
+
         message.append(answer);
       }
 
@@ -385,7 +442,10 @@ await runScenario('Scenario 1 — existing conversation baseline', async (harnes
 
   const archive = await waitForArchive(
     driverPage,
-    (value) => value.conversations.length === 1 && value.messages.length === 2,
+    (value) =>
+      value.conversations.length === 1 &&
+      value.messages.length === 2 &&
+      value.conversations[0]?.messageCount === 2,
     'baseline archive'
   );
   const conversation = archive.conversations[0];
@@ -981,13 +1041,14 @@ await runScenario('Scenario 9 — virtualized historical import and idempotency'
 await runScenario('Scenario 10 — Library search, export, appearance and keyboard', async (harness) => {
   const { page, driverPage } = await harness.open('https://chatgpt.com/c/e2e-library');
   await renderConversation(page, {
-    title: 'Library automation',
+    title: 'Check Repository Access And Build A Resilient Reader Experience',
     conversationId: 'e2e-library',
     turns: [
       userTurn('l-u1', '<img src=x onerror=alert(1)> literal user content'),
       assistantTurn('l-a1', 'l-m1', 'unique searchable assistant phrase', {
         activities: [{ text: 'Indexed fixture work', testId: 'work-step' }],
-        modelLabel: 'GPT-5.6'
+        modelLabel: 'GPT-5.6',
+        richFixture: true
       })
     ]
   });
@@ -1002,11 +1063,130 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
 
   await driverPage.reload({ waitUntil: 'domcontentloaded' });
   await driverPage.waitForFunction(() => document.querySelectorAll('#transcript .message').length === 2);
+  await driverPage.waitForFunction(() =>
+    Boolean(document.querySelector('#conversation-list .conversation[data-card-enhanced]'))
+  );
+  const sidebarPreview = await driverPage
+    .locator('#conversation-list .conversation .conversation-preview')
+    .innerText();
+  assert.match(
+    sidebarPreview,
+    /unique searchable assistant phrase Reader structure Structured Markdown should stay readable/i
+  );
+  assert.equal(
+    sidebarPreview.includes('phraseReader'),
+    false,
+    'sidebar preview must preserve block boundaries instead of gluing words'
+  );
+  assert.equal(
+    await driverPage
+      .locator('#conversation-list .conversation .conversation-title')
+      .evaluate((element) => getComputedStyle(element).whiteSpace),
+    'normal',
+    'sidebar conversation titles must wrap instead of using nowrap ellipsis'
+  );
 
   assert.equal(await driverPage.locator('#transcript img').count(), 0);
   assert.match(await driverPage.locator('#transcript').innerText(), /<img src=x onerror=alert\(1\)>/);
   assert.match(await driverPage.locator('#transcript').innerText(), /What ChatGPT showed while working \(1\)/);
   assert.match(await driverPage.locator('#transcript').innerText(), /Model shown by ChatGPT: GPT-5\.6/);
+
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .markdown-content h2').count(),
+    1,
+    'captured Markdown heading must render as a real heading'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .markdown-content ul li').count(),
+    2,
+    'captured Markdown list must render as list items'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .code-block code').innerText(),
+    'const formatted = true;',
+    'captured fenced code must render in a code block'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .code-copy-button').isVisible(),
+    true,
+    'code block copy action must be visible'
+  );
+  assert.ok(
+    Number(
+      await driverPage
+        .locator('#transcript .assistant .message-actions')
+        .evaluate((element) => getComputedStyle(element).opacity)
+    ) >= 0.6,
+    'message actions must remain discoverable without hover'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .markdown-content blockquote').count(),
+    1,
+    'captured blockquote must retain semantic structure'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .markdown-content table').count(),
+    1,
+    'captured Markdown table must render as a real table'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript').innerText().then((value) => value.includes('## Reader structure')),
+    false,
+    'Reader must not expose raw Markdown heading tokens'
+  );
+
+  assert.equal(
+    await driverPage.locator('#title').innerText(),
+    'Check Repository Access And Build A Resilient Reader Experience'
+  );
+  assert.equal(
+    await driverPage.locator('#title').evaluate((element) => getComputedStyle(element).whiteSpace),
+    'normal',
+    'desktop conversation title must wrap instead of using nowrap ellipsis'
+  );
+
+  await driverPage.keyboard.press('Control+F');
+  assert.equal(
+    await driverPage.locator('#conversation-findbar').isVisible(),
+    true,
+    'Ctrl/Cmd+F must open in-conversation find'
+  );
+  assert.equal(
+    await driverPage
+      .locator('#conversation-find-input')
+      .evaluate((element) => document.activeElement === element),
+    true,
+    'in-conversation find input must receive focus'
+  );
+  await driverPage.locator('#conversation-find-input').fill('item');
+  await driverPage.locator('#conversation-find-input').dispatchEvent('input');
+  await driverPage.waitForFunction(
+    () => document.querySelectorAll('#transcript .conversation-find-mark').length === 2
+  );
+  assert.equal(await driverPage.locator('#conversation-find-count').innerText(), '1 / 2');
+  assert.equal(
+    await driverPage.locator('#transcript .conversation-find-mark.current').innerText(),
+    'item'
+  );
+
+  await driverPage.keyboard.press('Enter');
+  assert.equal(await driverPage.locator('#conversation-find-count').innerText(), '2 / 2');
+  await driverPage.keyboard.press('Shift+Enter');
+  assert.equal(await driverPage.locator('#conversation-find-count').innerText(), '1 / 2');
+
+  await driverPage.keyboard.press('Escape');
+  assert.equal(await driverPage.locator('#conversation-findbar').isHidden(), true);
+  assert.equal(
+    await driverPage.locator('#transcript .conversation-find-mark').count(),
+    0,
+    'closing find must restore the normal transcript DOM'
+  );
+
+  await driverPage.locator('.action-menu > summary').click();
+  await driverPage.locator('#copy-chat-markdown').click();
+  await driverPage.waitForFunction(
+    () => document.getElementById('library-status')?.textContent === 'Conversation copied as Markdown.'
+  );
 
   await driverPage.keyboard.press('Control+K');
   assert.equal(await driverPage.locator('#search').evaluate((element) => document.activeElement === element), true);
@@ -1068,7 +1248,10 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   await driverPage.waitForFunction(() => window.matchMedia('(max-width: 760px)').matches);
   await driverPage.waitForTimeout(500);
   assert.equal(await driverPage.locator('#title').isVisible(), true, 'mobile conversation title must remain visible');
-  assert.equal(await driverPage.locator('#title').innerText(), 'Library automation');
+  assert.equal(
+    await driverPage.locator('#title').innerText(),
+    'Check Repository Access And Build A Resilient Reader Experience'
+  );
   assert.equal(
     await driverPage.locator('.mobile-actions-toggle').isVisible(),
     true,

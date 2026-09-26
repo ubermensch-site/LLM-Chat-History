@@ -464,6 +464,8 @@ export class ArchiveRepository {
       }
       return !(
         conversation.customTitle ||
+        conversation.favoriteAt ||
+        conversation.pinnedAt ||
         conversation.archivedAt ||
         conversation.projectId ||
         conversation.folderId ||

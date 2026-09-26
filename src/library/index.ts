@@ -8,7 +8,9 @@ import { importArchiveBundle } from '../storage/import';
 import {
   deleteConversationCascade,
   renameConversation,
-  setConversationArchived
+  setConversationArchived,
+  setConversationFavorite,
+  setConversationPinned
 } from '../storage/library-management';
 import {
   addProjectFolder,
@@ -43,6 +45,10 @@ import {
   type LibraryNavigationScope
 } from './library-navigation-state';
 import { requestMirrorRefresh, requestMirrorRefreshes } from './mirror-refresh';
+import { providerDisplayName } from './conversation-card';
+import { findTextRanges } from './conversation-find';
+import { conversationPreviewText } from './conversation-preview';
+import { renderMarkdownInto } from './markdown-renderer';
 import { filterLibraryRecords, type LibraryRecord } from './search';
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -80,8 +86,22 @@ const list = byId<HTMLDivElement>('conversation-list');
 const title = byId<HTMLHeadingElement>('title');
 const meta = byId<HTMLParagraphElement>('meta');
 const transcript = byId<HTMLElement>('transcript');
+const favoriteButton = byId<HTMLButtonElement>('favorite-chat');
 const downloadMarkdown = byId<HTMLButtonElement>('download-md');
+const shareButton = byId<HTMLButtonElement>('share-chat');
+const organizeButton = byId<HTMLButtonElement>('organize-chat');
+const findButton = byId<HTMLButtonElement>('find-chat');
+const pinButton = byId<HTMLButtonElement>('pin-chat');
+const openOriginalButton = byId<HTMLButtonElement>('open-original');
+const copyConversationMarkdownButton = byId<HTMLButtonElement>('copy-chat-markdown');
 const downloadJson = byId<HTMLButtonElement>('download-json');
+const organizerPanel = byId<HTMLDetailsElement>('organizer-panel');
+const findBar = byId<HTMLDivElement>('conversation-findbar');
+const findInput = byId<HTMLInputElement>('conversation-find-input');
+const findCount = byId<HTMLSpanElement>('conversation-find-count');
+const findPrevious = byId<HTMLButtonElement>('conversation-find-prev');
+const findNext = byId<HTMLButtonElement>('conversation-find-next');
+const findClose = byId<HTMLButtonElement>('conversation-find-close');
 const importJson = byId<HTMLButtonElement>('import-json');
 const importFile = byId<HTMLInputElement>('import-file');
 const libraryStatus = byId<HTMLParagraphElement>('library-status');
@@ -112,6 +132,8 @@ let libraryReady = false;
 let suppressNavigationReload = false;
 let deleteDeadlineMs: number | null = null;
 let deleteResetTimer: ReturnType<typeof setTimeout> | null = null;
+let conversationFindMarks: HTMLElement[] = [];
+let conversationFindIndex = -1;
 
 function selectedRecord(): LibraryRecord | undefined {
   return records.find((record) => record.conversation.id === selectedConversationId);
@@ -258,12 +280,169 @@ function renderManagementActions(): void {
   renameButton.disabled = disabled;
   archiveButton.disabled = disabled;
   deleteButton.disabled = disabled;
+  favoriteButton.disabled = disabled;
   downloadMarkdown.disabled = disabled;
+  shareButton.disabled = disabled;
+  organizeButton.disabled = disabled;
+  findButton.disabled = disabled;
+  pinButton.disabled = disabled;
+  openOriginalButton.disabled = disabled;
+  copyConversationMarkdownButton.disabled = disabled;
   downloadJson.disabled = disabled;
+
+  const favorited = Boolean(record?.conversation.favoriteAt);
+  const pinned = Boolean(record?.conversation.pinnedAt);
+  favoriteButton.setAttribute('aria-pressed', String(favorited));
+  pinButton.setAttribute('aria-pressed', String(pinned));
+  favoriteButton.classList.toggle('selected', favorited);
+  pinButton.classList.toggle('selected', pinned);
+  favoriteButton.querySelector('.conversation-action-icon')!.textContent = favorited ? '★' : '☆';
+  favoriteButton.title = favorited ? 'Remove from favorites' : 'Add to favorites';
+  pinButton.title = pinned ? 'Unpin this conversation' : 'Pin this conversation';
+
   archiveButton.textContent = record?.conversation.archivedAt ? 'Unarchive' : 'Archive';
   deleteButton.textContent = deleteIsArmed() ? 'Confirm delete' : 'Delete';
   deleteButton.classList.toggle('danger-armed', deleteIsArmed());
   renderOrganizationControls();
+}
+
+function clearConversationFindHighlights(): void {
+  for (const mark of conversationFindMarks) {
+    const parent = mark.parentNode;
+    mark.replaceWith(document.createTextNode(mark.textContent ?? ''));
+    parent?.normalize();
+  }
+  conversationFindMarks = [];
+  conversationFindIndex = -1;
+  findCount.textContent = '0 results';
+  findPrevious.disabled = true;
+  findNext.disabled = true;
+}
+
+function setCurrentConversationFindMatch(index: number, scroll = true): void {
+  if (!conversationFindMarks.length) {
+    conversationFindIndex = -1;
+    findCount.textContent = '0 results';
+    return;
+  }
+
+  const normalized =
+    ((index % conversationFindMarks.length) + conversationFindMarks.length) %
+    conversationFindMarks.length;
+
+  transcript.querySelectorAll('.message.find-current-message').forEach((message) => {
+    message.classList.remove('find-current-message');
+  });
+
+  for (const [markIndex, mark] of conversationFindMarks.entries()) {
+    const current = markIndex === normalized;
+    mark.classList.toggle('current', current);
+    mark.setAttribute('aria-current', current ? 'true' : 'false');
+  }
+
+  conversationFindMarks[normalized]?.closest('.message')?.classList.add('find-current-message');
+
+  conversationFindIndex = normalized;
+  findCount.textContent = `${normalized + 1} / ${conversationFindMarks.length}`;
+
+  if (scroll) {
+    conversationFindMarks[normalized]?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center'
+    });
+  }
+}
+
+function refreshConversationFind(scroll = false): void {
+  const previousIndex = conversationFindIndex;
+  clearConversationFindHighlights();
+
+  const query = findInput.value.trim();
+  if (!query || findBar.hidden) return;
+
+  const bodies = Array.from(transcript.querySelectorAll<HTMLElement>('.message-body'));
+  for (const body of bodies) {
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const value = node.nodeValue ?? '';
+        const parent = node.parentElement;
+        if (!value || !parent) return NodeFilter.FILTER_REJECT;
+        if (parent.closest('button, .message-actions, .code-block-toolbar')) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        return findTextRanges(value, query).length
+          ? NodeFilter.FILTER_ACCEPT
+          : NodeFilter.FILTER_REJECT;
+      }
+    });
+
+    const nodes: Text[] = [];
+    let current = walker.nextNode();
+    while (current) {
+      nodes.push(current as Text);
+      current = walker.nextNode();
+    }
+
+    for (const textNode of nodes) {
+      const value = textNode.nodeValue ?? '';
+      const ranges = findTextRanges(value, query);
+      if (!ranges.length) continue;
+
+      const fragment = document.createDocumentFragment();
+      let offset = 0;
+      for (const range of ranges) {
+        if (range.start > offset) {
+          fragment.append(document.createTextNode(value.slice(offset, range.start)));
+        }
+
+        const mark = document.createElement('mark');
+        mark.className = 'conversation-find-mark';
+        mark.textContent = value.slice(range.start, range.end);
+        fragment.append(mark);
+        conversationFindMarks.push(mark);
+        offset = range.end;
+      }
+
+      if (offset < value.length) {
+        fragment.append(document.createTextNode(value.slice(offset)));
+      }
+
+      textNode.replaceWith(fragment);
+    }
+  }
+
+  findPrevious.disabled = conversationFindMarks.length === 0;
+  findNext.disabled = conversationFindMarks.length === 0;
+
+  if (conversationFindMarks.length) {
+    const nextIndex =
+      previousIndex >= 0 ? Math.min(previousIndex, conversationFindMarks.length - 1) : 0;
+    setCurrentConversationFindMatch(nextIndex, scroll);
+  } else {
+    findCount.textContent = 'No results';
+  }
+}
+
+function openConversationFind(): void {
+  if (!selectedRecord()) return;
+  findBar.hidden = false;
+  findButton.setAttribute('aria-pressed', 'true');
+  findInput.focus();
+  findInput.select();
+  refreshConversationFind(false);
+}
+
+function closeConversationFind(): void {
+  clearConversationFindHighlights();
+  findInput.value = '';
+  findBar.hidden = true;
+  findButton.setAttribute('aria-pressed', 'false');
+}
+
+function stepConversationFind(direction: 1 | -1): void {
+  if (!conversationFindMarks.length) return;
+  const start = conversationFindIndex >= 0 ? conversationFindIndex : 0;
+  setCurrentConversationFindMatch(start + direction, true);
 }
 
 function renderTranscript(record: LibraryRecord): void {
@@ -278,8 +457,8 @@ function renderTranscript(record: LibraryRecord): void {
     .filter(Boolean)
     .join(' · ');
   title.textContent = conversationDisplayTitle(conversation);
-  const archived = conversation.archivedAt ? ` · Archived ${humanDate(conversation.archivedAt)}` : '';
-  meta.textContent = `${conversation.providerId} · ${conversation.messageCount} messages · ${conversation.recordingState} · ${organization} · Last captured ${humanDate(conversation.lastObservedAt)}${archived}`;
+  const archived = conversation.archivedAt ? ' · Archived' : '';
+  meta.textContent = `${providerDisplayName(conversation.providerId)} · ${conversation.messageCount} messages · Last captured ${humanDate(conversation.lastObservedAt)}${archived}`;
   transcript.replaceChildren();
   renderManagementActions();
 
@@ -291,21 +470,77 @@ function renderTranscript(record: LibraryRecord): void {
   for (const message of record.messages) {
     const card = document.createElement('article');
     card.className = `message ${message.role}`;
+    card.dataset.messageId = message.id;
+    card.setAttribute(
+      'aria-label',
+      `${message.role === 'user' ? 'User' : 'Assistant'} message`
+    );
+
+    const header = document.createElement('header');
+    header.className = 'message-header';
+
+    const identity = document.createElement('div');
+    identity.className = 'message-identity';
 
     const role = document.createElement('span');
     role.className = 'role';
-    role.textContent = message.role === 'user' ? 'User' : 'Assistant';
+    role.textContent =
+      message.role === 'user' ? 'You' : providerDisplayName(conversation.providerId);
 
     const time = document.createElement('time');
     time.className = 'time';
     time.dateTime = message.firstObservedAt;
     time.textContent = humanDate(message.firstObservedAt);
 
-    const content = document.createElement('div');
-    content.className = 'content';
-    content.textContent = message.plainText || '(empty rendered message)';
+    identity.append(role, time);
+    header.append(identity);
 
-    card.append(role, time, content);
+    const content = document.createElement('div');
+    content.className = 'content message-body';
+    const capturedMarkdown = message.markdown?.trim();
+    if (capturedMarkdown) {
+      content.classList.add('markdown-content');
+      renderMarkdownInto(content, capturedMarkdown);
+    } else {
+      content.textContent = message.plainText || '(empty rendered message)';
+    }
+
+    const messageExportText = capturedMarkdown || message.plainText || '';
+
+    const actions = document.createElement('div');
+    actions.className = 'message-actions';
+    actions.setAttribute('role', 'group');
+    actions.setAttribute('aria-label', `${role.textContent} message actions`);
+
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'message-action';
+    copy.textContent = 'Copy';
+    copy.addEventListener('click', () => {
+      void navigator.clipboard.writeText(messageExportText).then(
+        () => setLibraryStatus('Message copied.'),
+        () => setLibraryStatus('Could not copy this message.', true)
+      );
+    });
+
+    const exportMessage = document.createElement('button');
+    exportMessage.type = 'button';
+    exportMessage.className = 'message-action';
+    exportMessage.textContent = 'Export';
+    exportMessage.addEventListener('click', () => {
+      const label = message.role === 'user' ? 'user' : 'assistant';
+      const markdownExport = Boolean(capturedMarkdown);
+      downloadText(
+        `${label}-message-${message.id.slice(0, 8)}.${markdownExport ? 'md' : 'txt'}`,
+        messageExportText,
+        markdownExport ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8'
+      );
+      setLibraryStatus('Message exported.');
+    });
+
+    actions.append(copy, exportMessage);
+
+    card.append(header, content, actions);
 
     if (message.partial) {
       const partial = document.createElement('div');
@@ -316,10 +551,15 @@ function renderTranscript(record: LibraryRecord): void {
 
     transcript.append(card);
   }
+
+  if (!findBar.hidden && findInput.value.trim()) {
+    refreshConversationFind(false);
+  }
 }
 
 function clearSelection(message: string): void {
   selectedConversationId = null;
+  closeConversationFind();
   title.textContent = navigationScopeTitle(getLibraryNavigationScope(), projects);
   meta.textContent = message;
   renderManagementActions();
@@ -347,11 +587,29 @@ function conversationButton(record: LibraryRecord): HTMLButtonElement {
 
   const folder = folderById(record.project, conversation.folderId);
   const location = folder ? `${record.project?.name} / ${folder.name}` : record.project?.name ?? 'Unsorted';
+  const preview = document.createElement('span');
+  preview.className = 'conversation-preview';
+  const latestMessage = record.messages.at(-1);
+  preview.textContent = conversationPreviewText(
+    latestMessage?.markdown,
+    latestMessage?.plainText
+  );
+
   const details = document.createElement('span');
   details.className = 'conversation-meta';
   details.textContent = `${location} · ${conversation.messageCount} messages · ${humanDate(conversation.updatedAt)}`;
 
-  button.append(name, details);
+  const flags = document.createElement('span');
+  flags.className = 'conversation-flags';
+  flags.setAttribute('aria-label', 'Conversation status');
+  const flagText = [
+    conversation.pinnedAt ? 'Pinned' : '',
+    conversation.favoriteAt ? 'Favorite' : ''
+  ].filter(Boolean).join(' · ');
+  flags.textContent = flagText;
+
+  button.append(name, preview, details);
+  if (flagText) button.append(flags);
   button.addEventListener('click', () => selectConversation(conversation.id));
   return button;
 }
@@ -488,6 +746,86 @@ async function renameSelectedConversation(): Promise<void> {
       ? `Renamed to “${updated.customTitle}”.`
       : 'Custom name cleared; provider title restored.'
   );
+}
+
+async function toggleFavoriteSelectedConversation(): Promise<void> {
+  const record = selectedRecord();
+  if (!record) return;
+  const next = !record.conversation.favoriteAt;
+  const updated = await setConversationFavorite(database, record.conversation.id, next);
+  await loadRecords(updated.id);
+  void requestMirrorRefresh(updated.id);
+  setLibraryStatus(next ? 'Added to favorites.' : 'Removed from favorites.');
+}
+
+async function togglePinSelectedConversation(): Promise<void> {
+  const record = selectedRecord();
+  if (!record) return;
+  const next = !record.conversation.pinnedAt;
+  const updated = await setConversationPinned(database, record.conversation.id, next);
+  await loadRecords(updated.id);
+  void requestMirrorRefresh(updated.id);
+  setLibraryStatus(next ? 'Conversation pinned.' : 'Conversation unpinned.');
+}
+
+async function shareSelectedConversation(): Promise<void> {
+  const record = selectedRecord();
+  if (!record) return;
+
+  const bundle = await currentBundle();
+  const name = conversationDisplayTitle(bundle.conversation);
+  const markdown = renderMarkdownExport({
+    ...bundle,
+    exportedAt: new Date().toISOString()
+  });
+
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: name,
+        text: markdown
+      });
+      setLibraryStatus('Conversation shared.');
+      return;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+    }
+  }
+
+  await navigator.clipboard.writeText(markdown);
+  setLibraryStatus('Conversation copied as Markdown.');
+}
+
+function toggleOrganizer(): void {
+  if (!selectedRecord()) return;
+  organizerPanel.open = !organizerPanel.open;
+  organizeButton.setAttribute('aria-expanded', String(organizerPanel.open));
+  if (organizerPanel.open) {
+    organizerPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    window.setTimeout(() => projectSelect.focus(), 180);
+  }
+}
+
+function openSelectedOriginal(): void {
+  const record = selectedRecord();
+  if (!record) return;
+  window.open(record.conversation.sourceUrl, '_blank', 'noopener,noreferrer');
+}
+
+async function copySelectedConversationMarkdown(): Promise<void> {
+  const record = selectedRecord();
+  if (!record) return;
+
+  const markdown = renderMarkdownExport({
+    conversation: record.conversation,
+    messages: record.messages,
+    events: [],
+    project: record.project ?? null,
+    exportedAt: new Date().toISOString()
+  });
+
+  await navigator.clipboard.writeText(markdown);
+  setLibraryStatus('Conversation copied as Markdown.');
 }
 
 async function toggleArchiveSelectedConversation(): Promise<void> {
@@ -693,6 +1031,43 @@ viewActive.addEventListener('click', () => {
 viewArchived.addEventListener('click', () => {
   setLibraryNavigationScope({ kind: 'archived' });
 });
+favoriteButton.addEventListener('click', () => runAction(toggleFavoriteSelectedConversation));
+shareButton.addEventListener('click', () => runAction(shareSelectedConversation));
+organizeButton.addEventListener('click', toggleOrganizer);
+findButton.addEventListener('click', () => {
+  if (findBar.hidden) openConversationFind();
+  else closeConversationFind();
+});
+findInput.addEventListener('input', () => {
+  conversationFindIndex = -1;
+  refreshConversationFind(false);
+});
+findInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeConversationFind();
+    findButton.focus();
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    stepConversationFind(event.shiftKey ? -1 : 1);
+  }
+});
+findPrevious.addEventListener('click', () => stepConversationFind(-1));
+findNext.addEventListener('click', () => stepConversationFind(1));
+findClose.addEventListener('click', () => {
+  closeConversationFind();
+  findButton.focus();
+});
+pinButton.addEventListener('click', () => runAction(togglePinSelectedConversation));
+openOriginalButton.addEventListener('click', openSelectedOriginal);
+copyConversationMarkdownButton.addEventListener('click', () =>
+  runAction(copySelectedConversationMarkdown)
+);
+organizerPanel.addEventListener('toggle', () => {
+  organizeButton.setAttribute('aria-expanded', String(organizerPanel.open));
+});
 renameButton.addEventListener('click', () => runAction(renameSelectedConversation));
 archiveButton.addEventListener('click', () => runAction(toggleArchiveSelectedConversation));
 deleteButton.addEventListener('click', () => runAction(deleteSelectedConversation));
@@ -770,6 +1145,26 @@ void openArchiveDb()
     );
   });
 
+
+document.addEventListener('keydown', (event) => {
+  const active = document.activeElement;
+  const editingAnotherField =
+    active !== findInput &&
+    (active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement ||
+      active instanceof HTMLSelectElement);
+
+  if (
+    !editingAnotherField &&
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey &&
+    event.key.toLocaleLowerCase() === 'f' &&
+    selectedRecord()
+  ) {
+    event.preventDefault();
+    openConversationFind();
+  }
+});
 
 window.addEventListener(
   'pagehide',

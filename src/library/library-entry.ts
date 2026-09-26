@@ -2,6 +2,7 @@ import './library.css';
 import './library-compat.css';
 import './transcript-detail.css';
 import './premium-library-v3.css';
+import './reader-v2.css';
 import './index';
 import './search-navigation';
 import './checkpoints-ui';

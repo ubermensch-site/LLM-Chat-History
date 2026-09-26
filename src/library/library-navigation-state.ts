@@ -4,6 +4,7 @@ import type { LibraryRecord } from './search';
 export type LibraryNavigationScope =
   | { kind: 'library' }
   | { kind: 'recent' }
+  | { kind: 'favorites' }
   | { kind: 'archived' }
   | { kind: 'unsorted' }
   | { kind: 'project'; projectId: string }
@@ -14,6 +15,7 @@ export type LibraryNavigationScope =
 export type LibraryNavigationSection =
   | 'library'
   | 'recent'
+  | 'favorites'
   | 'projects'
   | 'folders'
   | 'tags'
@@ -33,6 +35,7 @@ export interface LibraryNavigationFacets {
   folders: NavigationCountItem[];
   tags: NavigationCountItem[];
   checkpointCount: number;
+  favoriteCount: number;
 }
 
 type ScopeListener = (scope: LibraryNavigationScope) => void;
@@ -86,6 +89,7 @@ export function navigationScopeTitle(
 ): string {
   if (scope.kind === 'library') return 'Library';
   if (scope.kind === 'recent') return 'Recent';
+  if (scope.kind === 'favorites') return 'Favorites';
   if (scope.kind === 'archived') return 'Archived';
   if (scope.kind === 'unsorted') return 'Unsorted';
   if (scope.kind === 'checkpoints') return 'Checkpoints';
@@ -111,6 +115,7 @@ export function recordMatchesNavigationScope(
   if (!activeRecord(record)) return false;
 
   if (scope.kind === 'library' || scope.kind === 'recent') return true;
+  if (scope.kind === 'favorites') return Boolean(conversation.favoriteAt);
   if (scope.kind === 'unsorted') return !conversation.projectId;
   if (scope.kind === 'project') return conversation.projectId === scope.projectId;
   if (scope.kind === 'folder') {
@@ -133,6 +138,7 @@ export function buildNavigationFacets(
   const tags = new Map<string, { name: string; count: number }>();
   let unsortedCount = 0;
   let checkpointCount = 0;
+  let favoriteCount = 0;
 
   for (const record of active) {
     const conversation = record.conversation;
@@ -156,6 +162,7 @@ export function buildNavigationFacets(
     }
 
     checkpointCount += record.checkpoints?.length ?? 0;
+    if (conversation.favoriteAt) favoriteCount += 1;
   }
 
   const projectItems = projects.map((project) => ({
@@ -180,6 +187,7 @@ export function buildNavigationFacets(
     tags: [...tags.entries()]
       .map(([id, value]) => ({ id, name: value.name, count: value.count }))
       .sort((a, b) => a.name.localeCompare(b.name)),
-    checkpointCount
+    checkpointCount,
+    favoriteCount
   };
 }

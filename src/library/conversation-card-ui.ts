@@ -88,12 +88,9 @@ async function enrichVisibleCards(): Promise<void> {
 
       const previewElement = document.createElement('span');
       previewElement.className = 'conversation-preview';
+      previewElement.textContent = preview.text;
       if (preview.role) {
-        const role = document.createElement('strong');
-        role.textContent = `${preview.role}: `;
-        previewElement.append(role, document.createTextNode(preview.text));
-      } else {
-        previewElement.textContent = preview.text;
+        previewElement.setAttribute('aria-label', `${preview.role}: ${preview.text}`);
       }
       button.append(previewElement);
 

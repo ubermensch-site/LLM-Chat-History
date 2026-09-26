@@ -46,13 +46,29 @@ function conversation(overrides: Partial<ArchiveConversation>): ArchiveConversat
 }
 
 describe('conversation card presentation', () => {
-  it('uses the latest non-empty message and compacts whitespace', () => {
+  it('uses the latest non-empty message and prefers Markdown-aware spacing', () => {
     const preview = conversationPreview([
       message({ plainText: 'First prompt', role: 'user' }),
-      message({ id: 'm2', role: 'assistant', plainText: '  A useful\n\nanswer   with spacing.  ' })
+      message({
+        id: 'm2',
+        role: 'assistant',
+        plainText: 'A usefulanswerwith spacing.',
+        markdown: 'A useful\n\n## answer\n\nwith **spacing**.'
+      })
     ]);
 
     expect(preview).toEqual({ role: 'Assistant', text: 'A useful answer with spacing.' });
+  });
+
+  it('falls back to plain text when Markdown is present but empty', () => {
+    const preview = conversationPreview([
+      message({ role: 'assistant', markdown: '', plainText: 'Fallback assistant preview' })
+    ]);
+
+    expect(preview).toEqual({
+      role: 'Assistant',
+      text: 'Fallback assistant preview'
+    });
   });
 
   it('truncates long previews without exposing extra content', () => {
@@ -83,7 +99,10 @@ describe('conversation card presentation', () => {
     expect(conversationStatusLabel(conversation({ recordingState: 'stopped' }))).toBeNull();
   });
 
-  it('uses the product-facing provider name', () => {
+  it('uses product-facing provider names', () => {
     expect(providerDisplayName('chatgpt')).toBe('ChatGPT');
+    expect(providerDisplayName('claude' as ArchiveConversation['providerId'])).toBe('Claude');
+    expect(providerDisplayName('gemini' as ArchiveConversation['providerId'])).toBe('Gemini');
+    expect(providerDisplayName('grok' as ArchiveConversation['providerId'])).toBe('Grok');
   });
 });

@@ -38,7 +38,7 @@ libraryToggle.textContent = 'Chats';
 
 const appbarTitle = document.createElement('div');
 appbarTitle.className = 'mobile-appbar-title';
-appbarTitle.textContent = 'LLM Chat History';
+appbarTitle.textContent = 'AI Chat History';
 
 const appbarStatus = document.createElement('span');
 appbarStatus.className = 'mobile-appbar-status';

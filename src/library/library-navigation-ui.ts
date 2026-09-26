@@ -66,6 +66,7 @@ function navButton(section: LibraryNavigationSection, label: string): Navigation
 
 const libraryButton = navButton('library', 'Library');
 const recentButton = navButton('recent', 'Recent');
+const favoritesButton = navButton('favorites', 'Favorites');
 const projectsButton = navButton('projects', 'Projects');
 const foldersButton = navButton('folders', 'Folders');
 const tagsButton = navButton('tags', 'Tags');
@@ -76,6 +77,7 @@ nav.append(
   browseLabel,
   libraryButton,
   recentButton,
+  favoritesButton,
   organizeLabel,
   projectsButton,
   foldersButton,
@@ -95,7 +97,8 @@ let facets: LibraryNavigationFacets = {
   unsortedCount: 0,
   folders: [],
   tags: [],
-  checkpointCount: 0
+  checkpointCount: 0,
+  favoriteCount: 0
 };
 let projects: ArchiveProject[] = [];
 let activeConversationCount = 0;
@@ -239,6 +242,7 @@ function renderDetail(): void {
 function updateCounts(): void {
   setCount('library', activeConversationCount);
   setCount('recent', activeConversationCount);
+  setCount('favorites', facets.favoriteCount);
   setCount('projects', facets.projects.length + (facets.unsortedCount ? 1 : 0));
   setCount('folders', facets.folders.length);
   setCount('tags', facets.tags.length);
@@ -296,6 +300,10 @@ function openSection(section: LibraryNavigationSection): void {
   }
   if (section === 'recent') {
     setScope({ kind: 'recent' });
+    return;
+  }
+  if (section === 'favorites') {
+    setScope({ kind: 'favorites' });
     return;
   }
   if (section === 'archived') {

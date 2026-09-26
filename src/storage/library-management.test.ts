@@ -7,7 +7,9 @@ import { openArchiveDb, requestToPromise } from './db';
 import {
   deleteConversationCascade,
   renameConversation,
-  setConversationArchived
+  setConversationArchived,
+  setConversationFavorite,
+  setConversationPinned
 } from './library-management';
 
 const opened: Array<{ name: string; db: IDBDatabase }> = [];
@@ -121,6 +123,47 @@ describe('Library conversation management', () => {
     expect(restored.archivedAt).toBeUndefined();
     expect(restored.providerConversationId).toBe('library-test');
     expect(restored.recordingState).toBe('recording');
+  });
+
+  it('persists favorite and pin state independently from provider capture fields', async () => {
+    const { db, repository } = await createArchive();
+    await repository.persistObservation(conversation('Organize me', '2026-09-16T15:30:00.000Z'));
+    const [created] = await repository.listConversations();
+
+    const favorite = await setConversationFavorite(
+      db,
+      created!.id,
+      true,
+      '2026-09-16T15:31:00.000Z'
+    );
+    expect(favorite.favoriteAt).toBe('2026-09-16T15:31:00.000Z');
+    expect(favorite.providerConversationId).toBe(created?.providerConversationId);
+
+    const pinned = await setConversationPinned(
+      db,
+      created!.id,
+      true,
+      '2026-09-16T15:32:00.000Z'
+    );
+    expect(pinned.pinnedAt).toBe('2026-09-16T15:32:00.000Z');
+    expect(pinned.favoriteAt).toBe('2026-09-16T15:31:00.000Z');
+
+    const unfavorited = await setConversationFavorite(
+      db,
+      created!.id,
+      false,
+      '2026-09-16T15:33:00.000Z'
+    );
+    expect(unfavorited.favoriteAt).toBeUndefined();
+    expect(unfavorited.pinnedAt).toBe('2026-09-16T15:32:00.000Z');
+
+    const unpinned = await setConversationPinned(
+      db,
+      created!.id,
+      false,
+      '2026-09-16T15:34:00.000Z'
+    );
+    expect(unpinned.pinnedAt).toBeUndefined();
   });
 
   it('deletes the conversation, messages and conversation events atomically', async () => {
