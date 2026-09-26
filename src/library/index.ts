@@ -328,12 +328,17 @@ function setCurrentConversationFindMatch(index: number, scroll = true): void {
     ((index % conversationFindMarks.length) + conversationFindMarks.length) %
     conversationFindMarks.length;
 
+  transcript.querySelectorAll('.message.find-current-message').forEach((message) => {
+    message.classList.remove('find-current-message');
+  });
+
   for (const [markIndex, mark] of conversationFindMarks.entries()) {
     const current = markIndex === normalized;
     mark.classList.toggle('current', current);
     mark.setAttribute('aria-current', current ? 'true' : 'false');
-    mark.closest('.message')?.classList.toggle('find-current-message', current);
   }
+
+  conversationFindMarks[normalized]?.closest('.message')?.classList.add('find-current-message');
 
   conversationFindIndex = normalized;
   findCount.textContent = `${normalized + 1} / ${conversationFindMarks.length}`;
