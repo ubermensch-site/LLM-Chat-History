@@ -313,8 +313,7 @@ function renderTranscript(record: LibraryRecord): void {
     .join(' · ');
   title.textContent = conversationDisplayTitle(conversation);
   const archived = conversation.archivedAt ? ' · Archived' : '';
-  const organizationHint = organization && organization !== 'Unsorted' ? ` · ${organization}` : '';
-  meta.textContent = `${providerLabel(conversation.providerId)} · ${conversation.messageCount} messages · Last captured ${humanDate(conversation.lastObservedAt)}${organizationHint}${archived}`;
+  meta.textContent = `${providerLabel(conversation.providerId)} · ${conversation.messageCount} messages · Last captured ${humanDate(conversation.lastObservedAt)}${archived}`;
   transcript.replaceChildren();
   renderManagementActions();
 
