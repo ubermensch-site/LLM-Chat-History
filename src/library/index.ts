@@ -8,7 +8,9 @@ import { importArchiveBundle } from '../storage/import';
 import {
   deleteConversationCascade,
   renameConversation,
-  setConversationArchived
+  setConversationArchived,
+  setConversationFavorite,
+  setConversationPinned
 } from '../storage/library-management';
 import {
   addProjectFolder,
@@ -80,8 +82,14 @@ const list = byId<HTMLDivElement>('conversation-list');
 const title = byId<HTMLHeadingElement>('title');
 const meta = byId<HTMLParagraphElement>('meta');
 const transcript = byId<HTMLElement>('transcript');
+const favoriteButton = byId<HTMLButtonElement>('favorite-chat');
 const downloadMarkdown = byId<HTMLButtonElement>('download-md');
+const shareButton = byId<HTMLButtonElement>('share-chat');
+const organizeButton = byId<HTMLButtonElement>('organize-chat');
+const pinButton = byId<HTMLButtonElement>('pin-chat');
+const openOriginalButton = byId<HTMLButtonElement>('open-original');
 const downloadJson = byId<HTMLButtonElement>('download-json');
+const organizerPanel = byId<HTMLDetailsElement>('organizer-panel');
 const importJson = byId<HTMLButtonElement>('import-json');
 const importFile = byId<HTMLInputElement>('import-file');
 const libraryStatus = byId<HTMLParagraphElement>('library-status');
@@ -258,8 +266,24 @@ function renderManagementActions(): void {
   renameButton.disabled = disabled;
   archiveButton.disabled = disabled;
   deleteButton.disabled = disabled;
+  favoriteButton.disabled = disabled;
   downloadMarkdown.disabled = disabled;
+  shareButton.disabled = disabled;
+  organizeButton.disabled = disabled;
+  pinButton.disabled = disabled;
+  openOriginalButton.disabled = disabled;
   downloadJson.disabled = disabled;
+
+  const favorited = Boolean(record?.conversation.favoriteAt);
+  const pinned = Boolean(record?.conversation.pinnedAt);
+  favoriteButton.setAttribute('aria-pressed', String(favorited));
+  pinButton.setAttribute('aria-pressed', String(pinned));
+  favoriteButton.classList.toggle('selected', favorited);
+  pinButton.classList.toggle('selected', pinned);
+  favoriteButton.querySelector('.conversation-action-icon')!.textContent = favorited ? '★' : '☆';
+  favoriteButton.title = favorited ? 'Remove from favorites' : 'Add to favorites';
+  pinButton.title = pinned ? 'Unpin this conversation' : 'Pin this conversation';
+
   archiveButton.textContent = record?.conversation.archivedAt ? 'Unarchive' : 'Archive';
   deleteButton.textContent = deleteIsArmed() ? 'Confirm delete' : 'Delete';
   deleteButton.classList.toggle('danger-armed', deleteIsArmed());
@@ -291,21 +315,67 @@ function renderTranscript(record: LibraryRecord): void {
   for (const message of record.messages) {
     const card = document.createElement('article');
     card.className = `message ${message.role}`;
+    card.dataset.messageId = message.id;
+    card.setAttribute(
+      'aria-label',
+      `${message.role === 'user' ? 'User' : 'Assistant'} message`
+    );
+
+    const header = document.createElement('header');
+    header.className = 'message-header';
+
+    const identity = document.createElement('div');
+    identity.className = 'message-identity';
 
     const role = document.createElement('span');
     role.className = 'role';
-    role.textContent = message.role === 'user' ? 'User' : 'Assistant';
+    role.textContent = message.role === 'user' ? 'You' : 'ChatGPT';
 
     const time = document.createElement('time');
     time.className = 'time';
     time.dateTime = message.firstObservedAt;
     time.textContent = humanDate(message.firstObservedAt);
 
+    identity.append(role, time);
+    header.append(identity);
+
     const content = document.createElement('div');
-    content.className = 'content';
+    content.className = 'content message-body';
     content.textContent = message.plainText || '(empty rendered message)';
 
-    card.append(role, time, content);
+    const actions = document.createElement('div');
+    actions.className = 'message-actions';
+    actions.setAttribute('role', 'group');
+    actions.setAttribute('aria-label', `${role.textContent} message actions`);
+
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'message-action';
+    copy.textContent = 'Copy';
+    copy.addEventListener('click', () => {
+      void navigator.clipboard.writeText(message.plainText || message.markdown || '').then(
+        () => setLibraryStatus('Message copied.'),
+        () => setLibraryStatus('Could not copy this message.', true)
+      );
+    });
+
+    const exportMessage = document.createElement('button');
+    exportMessage.type = 'button';
+    exportMessage.className = 'message-action';
+    exportMessage.textContent = 'Export';
+    exportMessage.addEventListener('click', () => {
+      const label = message.role === 'user' ? 'user' : 'assistant';
+      downloadText(
+        `${label}-message-${message.id.slice(0, 8)}.txt`,
+        message.plainText || message.markdown || '',
+        'text/plain;charset=utf-8'
+      );
+      setLibraryStatus('Message exported.');
+    });
+
+    actions.append(copy, exportMessage);
+
+    card.append(header, content, actions);
 
     if (message.partial) {
       const partial = document.createElement('div');
@@ -351,7 +421,17 @@ function conversationButton(record: LibraryRecord): HTMLButtonElement {
   details.className = 'conversation-meta';
   details.textContent = `${location} · ${conversation.messageCount} messages · ${humanDate(conversation.updatedAt)}`;
 
+  const flags = document.createElement('span');
+  flags.className = 'conversation-flags';
+  flags.setAttribute('aria-label', 'Conversation status');
+  const flagText = [
+    conversation.pinnedAt ? 'Pinned' : '',
+    conversation.favoriteAt ? 'Favorite' : ''
+  ].filter(Boolean).join(' · ');
+  flags.textContent = flagText;
+
   button.append(name, details);
+  if (flagText) button.append(flags);
   button.addEventListener('click', () => selectConversation(conversation.id));
   return button;
 }
@@ -488,6 +568,67 @@ async function renameSelectedConversation(): Promise<void> {
       ? `Renamed to “${updated.customTitle}”.`
       : 'Custom name cleared; provider title restored.'
   );
+}
+
+async function toggleFavoriteSelectedConversation(): Promise<void> {
+  const record = selectedRecord();
+  if (!record) return;
+  const next = !record.conversation.favoriteAt;
+  const updated = await setConversationFavorite(database, record.conversation.id, next);
+  await loadRecords(updated.id);
+  void requestMirrorRefresh(updated.id);
+  setLibraryStatus(next ? 'Added to favorites.' : 'Removed from favorites.');
+}
+
+async function togglePinSelectedConversation(): Promise<void> {
+  const record = selectedRecord();
+  if (!record) return;
+  const next = !record.conversation.pinnedAt;
+  const updated = await setConversationPinned(database, record.conversation.id, next);
+  await loadRecords(updated.id);
+  void requestMirrorRefresh(updated.id);
+  setLibraryStatus(next ? 'Conversation pinned.' : 'Conversation unpinned.');
+}
+
+async function shareSelectedConversation(): Promise<void> {
+  const record = selectedRecord();
+  if (!record) return;
+  const conversation = record.conversation;
+  const name = conversationDisplayTitle(conversation);
+  const sourceUrl = conversation.sourceUrl;
+
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: name,
+        text: `AI Chat History: ${name}`,
+        url: sourceUrl
+      });
+      setLibraryStatus('Share sheet opened.');
+      return;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+    }
+  }
+
+  await navigator.clipboard.writeText(sourceUrl);
+  setLibraryStatus('Original conversation link copied.');
+}
+
+function toggleOrganizer(): void {
+  if (!selectedRecord()) return;
+  organizerPanel.open = !organizerPanel.open;
+  organizeButton.setAttribute('aria-expanded', String(organizerPanel.open));
+  if (organizerPanel.open) {
+    organizerPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    window.setTimeout(() => projectSelect.focus(), 180);
+  }
+}
+
+function openSelectedOriginal(): void {
+  const record = selectedRecord();
+  if (!record) return;
+  window.open(record.conversation.sourceUrl, '_blank', 'noopener,noreferrer');
 }
 
 async function toggleArchiveSelectedConversation(): Promise<void> {
@@ -692,6 +833,14 @@ viewActive.addEventListener('click', () => {
 });
 viewArchived.addEventListener('click', () => {
   setLibraryNavigationScope({ kind: 'archived' });
+});
+favoriteButton.addEventListener('click', () => runAction(toggleFavoriteSelectedConversation));
+shareButton.addEventListener('click', () => runAction(shareSelectedConversation));
+organizeButton.addEventListener('click', toggleOrganizer);
+pinButton.addEventListener('click', () => runAction(togglePinSelectedConversation));
+openOriginalButton.addEventListener('click', openSelectedOriginal);
+organizerPanel.addEventListener('toggle', () => {
+  organizeButton.setAttribute('aria-expanded', String(organizerPanel.open));
 });
 renameButton.addEventListener('click', () => runAction(renameSelectedConversation));
 archiveButton.addEventListener('click', () => runAction(toggleArchiveSelectedConversation));
