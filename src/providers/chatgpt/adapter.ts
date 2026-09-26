@@ -13,8 +13,9 @@ import {
   ASSISTANT_CONTENT_SELECTORS,
   CHATGPT_HOSTS,
   GENERATION_CONTROL_SELECTORS,
+  KEYED_TURN_SELECTOR,
   ROLE_FALLBACK_SELECTOR,
-  TURN_SHELL_SELECTORS,
+  TURN_DISCOVERY_STRATEGIES,
   USER_CONTENT_SELECTORS
 } from './selectors';
 import {
@@ -48,6 +49,46 @@ export function normalizeVisibleModelLabel(value: string): string | null {
     : null;
 }
 
+export interface ChatGptRoleSignals {
+  dataTurn?: string | null;
+  messageAuthorRole?: string | null;
+  dataRole?: string | null;
+  messageAuthor?: string | null;
+  userMessageBubble?: boolean;
+  conversationRole?: string | null;
+}
+
+export function inferChatGptTurnRole(signals: ChatGptRoleSignals): TurnRole | null {
+  const explicitRoles = [
+    signals.dataTurn,
+    signals.messageAuthorRole,
+    signals.dataRole,
+    signals.messageAuthor,
+    signals.conversationRole
+  ];
+
+  for (const value of explicitRoles) {
+    if (value === 'user' || value === 'assistant') return value;
+  }
+
+  return signals.userMessageBubble ? 'user' : null;
+}
+
+function roleSignalsFor(element: Element): ChatGptRoleSignals {
+  return {
+    dataTurn: element.getAttribute('data-turn'),
+    messageAuthorRole: element.getAttribute('data-message-author-role'),
+    dataRole: element.getAttribute('data-role'),
+    messageAuthor: element.getAttribute('data-message-author'),
+    userMessageBubble: element.hasAttribute('data-user-message-bubble'),
+    conversationRole: element.getAttribute('data-conversation-role')
+  };
+}
+
+function directRoleFor(element: Element): TurnRole | null {
+  return inferChatGptTurnRole(roleSignalsFor(element));
+}
+
 function queryFirst(root: ParentNode, selectors: readonly string[]): Element | null {
   for (const selector of selectors) {
     const match = root.querySelector(selector);
@@ -56,50 +97,255 @@ function queryFirst(root: ParentNode, selectors: readonly string[]): Element | n
   return null;
 }
 
-function collectTurnElements(): Element[] {
-  const found = new Set<Element>();
+interface DiscoveredTurn {
+  element: Element;
+  role: TurnRole;
+  strategy: 'turn-shells' | 'keyed-exchanges' | 'semantic-roles';
+}
 
-  for (const selector of TURN_SHELL_SELECTORS) {
-    document.querySelectorAll(selector).forEach((element) => found.add(element));
-  }
+function compareElementsInDocumentOrder(a: Element, b: Element): number {
+  if (a === b) return 0;
+  const relation = a.compareDocumentPosition(b);
+  if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+  if (relation & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+  return 0;
+}
 
-  if (found.size === 0) {
-    document.querySelectorAll(ROLE_FALLBACK_SELECTOR).forEach((element) => found.add(element));
-  }
-
-  return [...found].sort((a, b) => {
-    if (a === b) return 0;
-    const relation = a.compareDocumentPosition(b);
-    if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
-    if (relation & Node.DOCUMENT_POSITION_PRECEDING) return 1;
-    return 0;
+function sortDiscoveredTurns(turns: DiscoveredTurn[]): DiscoveredTurn[] {
+  return turns.sort((a, b) => {
+    const position = compareElementsInDocumentOrder(a.element, b.element);
+    if (position !== 0) return position;
+    if (a.role === b.role) return 0;
+    return a.role === 'user' ? -1 : 1;
   });
 }
 
-function roleFor(element: Element): TurnRole | null {
-  const shellRole = element.getAttribute('data-turn');
-  if (shellRole === 'user' || shellRole === 'assistant') return shellRole;
+export interface ChatGptContainerRoleSignals {
+  directRole?: TurnRole | null;
+  userMessageBubblePresent?: boolean;
+  explicitUserPresent?: boolean;
+  explicitAssistantPresent?: boolean;
+}
 
-  const roleNode = element.matches('[data-message-author-role]')
-    ? element
-    : element.querySelector('[data-message-author-role]');
-  const messageRole = roleNode?.getAttribute('data-message-author-role');
-  return messageRole === 'user' || messageRole === 'assistant' ? messageRole : null;
+export function inferChatGptContainerRole(
+  signals: ChatGptContainerRoleSignals
+): TurnRole | null {
+  if (signals.directRole) return signals.directRole;
+  if (signals.userMessageBubblePresent) return 'user';
+  if (signals.explicitUserPresent) return 'user';
+  if (signals.explicitAssistantPresent) return 'assistant';
+  return null;
+}
+
+function roleFor(element: Element): TurnRole | null {
+  return inferChatGptContainerRole({
+    directRole: directRoleFor(element),
+    userMessageBubblePresent: Boolean(element.querySelector('[data-user-message-bubble]')),
+    explicitUserPresent: Boolean(
+      element.querySelector(
+        '[data-message-author-role="user"], [data-role="user"], [data-message-author="user"]'
+      )
+    ),
+    explicitAssistantPresent: Boolean(
+      element.querySelector(
+        '[data-message-author-role="assistant"], [data-role="assistant"], [data-message-author="assistant"], [data-conversation-role="assistant"], [data-chatgpt-agent-turn-start]'
+      )
+    )
+  });
+}
+
+export interface ChatGptKeyedExchangeSignals {
+  userMessageBubblePresent?: boolean;
+  userContentUnitPresent?: boolean;
+  assistantRolePresent?: boolean;
+  assistantStartPresent?: boolean;
+  assistantContentUnitPresent?: boolean;
+  assistantMessageBodyPresent?: boolean;
+}
+
+export function inferChatGptKeyedRoles(
+  signals: ChatGptKeyedExchangeSignals
+): TurnRole[] {
+  const roles: TurnRole[] = [];
+  if (signals.userMessageBubblePresent || signals.userContentUnitPresent) {
+    roles.push('user');
+  }
+  if (
+    signals.assistantRolePresent ||
+    signals.assistantStartPresent ||
+    signals.assistantContentUnitPresent ||
+    signals.assistantMessageBodyPresent
+  ) {
+    roles.push('assistant');
+  }
+  return roles;
+}
+
+export function chatGptProviderTurnId(input: {
+  role: TurnRole;
+  turnKey?: string | null;
+  turnId?: string | null;
+  providerMessageId?: string | null;
+  testId?: string | null;
+  index: number;
+}): string {
+  if (input.turnKey) return `group:${input.role}:${input.turnKey}`;
+  return (
+    input.turnId ??
+    input.providerMessageId ??
+    input.testId ??
+    `dom:${input.role}:${input.index}`
+  );
+}
+
+function keyedRolesFor(element: Element): TurnRole[] {
+  return inferChatGptKeyedRoles({
+    userMessageBubblePresent: Boolean(element.querySelector('[data-user-message-bubble]')),
+    userContentUnitPresent: Boolean(
+      element.querySelector('[data-content-search-unit-key$=":user"]')
+    ),
+    assistantRolePresent: Boolean(
+      element.querySelector('[data-conversation-role="assistant"]')
+    ),
+    assistantStartPresent: Boolean(
+      element.querySelector('[data-chatgpt-agent-turn-start]')
+    ),
+    assistantContentUnitPresent: Boolean(
+      element.querySelector('[data-content-search-unit-key$=":assistant"]')
+    ),
+    assistantMessageBodyPresent: Boolean(
+      element.querySelector('[data-markdown-text-style="assistant-message"]')
+    )
+  });
+}
+
+function dedupeDiscoveredTurns(turns: DiscoveredTurn[]): DiscoveredTurn[] {
+  const seen = new Map<Element, Set<TurnRole>>();
+  return turns.filter((turn) => {
+    const roles = seen.get(turn.element) ?? new Set<TurnRole>();
+    if (roles.has(turn.role)) return false;
+    roles.add(turn.role);
+    seen.set(turn.element, roles);
+    return true;
+  });
+}
+
+function collectTurns(): DiscoveredTurn[] {
+  for (const strategy of TURN_DISCOVERY_STRATEGIES) {
+    const found = new Set<Element>();
+
+    for (const selector of strategy.selectors) {
+      document.querySelectorAll(selector).forEach((element) => found.add(element));
+    }
+
+    const discovered: DiscoveredTurn[] = [];
+
+    if (strategy.id === 'keyed-exchanges') {
+      for (const element of found) {
+        for (const role of keyedRolesFor(element)) {
+          discovered.push({ element, role, strategy: 'keyed-exchanges' });
+        }
+      }
+    } else if (strategy.id === 'turn-shells') {
+      for (const element of found) {
+        // A current keyed exchange can contain both roles. Let the dedicated
+        // keyed strategy split it into two logical turns instead of collapsing
+        // the exchange to whichever role is encountered first.
+        if (element.matches(KEYED_TURN_SELECTOR) || element.closest(KEYED_TURN_SELECTOR)) {
+          continue;
+        }
+        const role = roleFor(element);
+        if (role) discovered.push({ element, role, strategy: 'turn-shells' });
+      }
+    } else {
+      const keyedContainers = new Set<Element>();
+      for (const element of found) {
+        const keyed = element.closest(KEYED_TURN_SELECTOR);
+        if (keyed) {
+          keyedContainers.add(keyed);
+          continue;
+        }
+        const role = directRoleFor(element) ?? roleFor(element);
+        if (role) discovered.push({ element, role, strategy: 'semantic-roles' });
+      }
+      for (const keyed of keyedContainers) {
+        for (const role of keyedRolesFor(keyed)) {
+          discovered.push({ element: keyed, role, strategy: 'semantic-roles' });
+        }
+      }
+    }
+
+    const normalized = sortDiscoveredTurns(dedupeDiscoveredTurns(discovered));
+    if (normalized.length > 0) return normalized;
+  }
+
+  return [];
 }
 
 function messageNodeFor(element: Element, role: TurnRole): Element | null {
-  if (element.getAttribute('data-message-author-role') === role) return element;
-  return element.querySelector(`[data-message-author-role="${role}"]`);
+  if (element.matches(ROLE_FALLBACK_SELECTOR) && directRoleFor(element) === role) {
+    return element;
+  }
+
+  if (role === 'user') {
+    return (
+      element.querySelector('[data-content-search-unit-key$=":user"]') ??
+      element.querySelector('[data-user-message-bubble]') ??
+      element.querySelector('[data-message-author-role="user"]') ??
+      element.querySelector('[data-role="user"]') ??
+      element.querySelector('[data-message-author="user"]') ??
+      (directRoleFor(element) === 'user' ? element : null)
+    );
+  }
+
+  return (
+    element.querySelector('[data-content-search-unit-key$=":assistant"]') ??
+    element.querySelector('[data-message-author-role="assistant"]') ??
+    element.querySelector('[data-role="assistant"]') ??
+    element.querySelector('[data-message-author="assistant"]') ??
+    element.querySelector('[data-conversation-role="assistant"]') ??
+    (directRoleFor(element) === 'assistant' ? element : null)
+  );
+}
+
+function closestAttribute(element: Element, attribute: string): string | null {
+  const direct = element.getAttribute(attribute);
+  if (direct) return direct;
+
+  const owner = element.closest(`[${attribute}]`);
+  return owner?.getAttribute(attribute) ?? null;
+}
+
+function providerMessageIdFor(element: Element, role: TurnRole): string | null {
+  const messageNode = messageNodeFor(element, role);
+  if (!messageNode) return null;
+
+  return (
+    messageNode.getAttribute('data-message-id') ??
+    messageNode.querySelector('[data-message-id]')?.getAttribute('data-message-id') ??
+    null
+  );
 }
 
 function assistantAnswerNodeFor(element: Element): Element | null {
-  const roleNode = messageNodeFor(element, 'assistant') ?? element;
-  return queryFirst(roleNode, ASSISTANT_CONTENT_SELECTORS);
+  // Newer ChatGPT renderers may expose a small semantic accessibility marker
+  // (for example, "ChatGPT said:") separately from the rendered answer body.
+  // Search the full turn container first so that marker text is never mistaken
+  // for the actual assistant response.
+  const fromTurn = queryFirst(element, ASSISTANT_CONTENT_SELECTORS);
+  if (fromTurn) return fromTurn;
+
+  const roleNode = messageNodeFor(element, 'assistant');
+  return roleNode ? queryFirst(roleNode, ASSISTANT_CONTENT_SELECTORS) : null;
 }
 
 function contentNodeFor(element: Element, role: TurnRole): Element | null {
   const roleNode = messageNodeFor(element, role) ?? element;
-  if (role === 'assistant') return assistantAnswerNodeFor(element) ?? roleNode;
+  if (role === 'assistant') {
+    // Never fall back to the assistant role/accessibility marker itself:
+    // that is how the live build captured "ChatGPT said:" as message content.
+    return assistantAnswerNodeFor(element);
+  }
   return queryFirst(roleNode, USER_CONTENT_SELECTORS) ?? roleNode;
 }
 
@@ -239,9 +485,9 @@ export class ChatGptAdapter implements ProviderAdapter {
   }
 
   getConversationScrollContainer(): HTMLElement | null {
-    const turns = collectTurnElements();
+    const turns = collectTurns();
     for (const turn of turns) {
-      const scrollable = nearestScrollableAncestor(turn);
+      const scrollable = nearestScrollableAncestor(turn.element);
       if (scrollable) return scrollable;
     }
 
@@ -253,32 +499,39 @@ export class ChatGptAdapter implements ProviderAdapter {
     const identity = this.getConversationIdentity();
     if (!identity) return [];
 
-    const elements = collectTurnElements();
+    const discoveredTurns = collectTurns();
     const generating = hasGenerationControl();
     let lastAssistantIndex = -1;
 
-    elements.forEach((element, index) => {
-      if (roleFor(element) === 'assistant') lastAssistantIndex = index;
+    discoveredTurns.forEach((turn, index) => {
+      if (turn.role === 'assistant') lastAssistantIndex = index;
     });
 
     const turns: ProviderTurnObservation[] = [];
 
-    elements.forEach((element, index) => {
-      const role = roleFor(element);
-      if (!role) return;
-
-      const messageNode = messageNodeFor(element, role);
-      const providerMessageId = messageNode?.getAttribute('data-message-id') ?? null;
-      const providerTurnId =
-        element.getAttribute('data-turn-id') ??
-        providerMessageId ??
-        element.getAttribute('data-testid') ??
-        `dom:${role}:${index}`;
+    discoveredTurns.forEach((turn, index) => {
+      const { element, role } = turn;
+      const providerMessageId = providerMessageIdFor(element, role);
+      const turnKey = closestAttribute(element, 'data-turn-key');
+      const providerTurnId = chatGptProviderTurnId({
+        role,
+        turnKey,
+        turnId: closestAttribute(element, 'data-turn-id'),
+        providerMessageId,
+        testId: element.getAttribute('data-testid'),
+        index
+      });
       const observedAt = isoNow();
       const contentNode = contentNodeFor(element, role);
       const answerNode = role === 'assistant' ? assistantAnswerNodeFor(element) : null;
       const plainText = normalizedText(contentNode);
       const renderedMarkdown = contentNode ? renderDomAsMarkdown(contentNode) : '';
+
+      // A semantic role marker without rendered message content is not a
+      // conversation turn. Skipping it is safer than persisting accessibility
+      // labels as transcript text.
+      if (!contentNode || (!plainText && !renderedMarkdown)) return;
+
       const visibleActivities =
         role === 'assistant'
           ? visibleActivitiesFor(element, answerNode, providerTurnId, observedAt)
@@ -310,7 +563,7 @@ export class ChatGptAdapter implements ProviderAdapter {
       return { state: 'error', code: 'unsupported-location', observedAt: isoNow() };
     }
 
-    const turns = collectTurnElements();
+    const turns = collectTurns();
     let base: AdapterHealth;
     if (identity.providerConversationId && turns.length === 0) {
       base = {
@@ -320,13 +573,12 @@ export class ChatGptAdapter implements ProviderAdapter {
         observedAt: isoNow()
       };
     } else {
-      const missingStableIds = turns.some((element, index) => {
-        const role = roleFor(element);
-        if (!role) return false;
-        const messageNode = messageNodeFor(element, role);
-        return !element.getAttribute('data-turn-id') &&
-          !messageNode?.getAttribute('data-message-id') &&
-          !element.getAttribute('data-testid') &&
+      const missingStableIds = turns.some((turn, index) => {
+        const providerMessageId = providerMessageIdFor(turn.element, turn.role);
+        return !closestAttribute(turn.element, 'data-turn-id') &&
+          !closestAttribute(turn.element, 'data-turn-key') &&
+          !providerMessageId &&
+          !turn.element.getAttribute('data-testid') &&
           index >= 0;
       });
 
