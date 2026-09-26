@@ -16,7 +16,11 @@ export type MarkdownBlock =
       type: 'list';
       ordered: boolean;
       start: number;
-      items: Array<{ children: MarkdownInlineNode[]; nested: MarkdownBlock[] }>;
+      items: Array<{
+        children: MarkdownInlineNode[];
+        nested: MarkdownBlock[];
+        checked: boolean | null;
+      }>;
     }
   | { type: 'code-block'; language: string; value: string }
   | { type: 'blockquote'; children: MarkdownBlock[] }
@@ -224,9 +228,12 @@ function parseList(
     const current = parseListLine(lines[index] ?? '');
     if (!current || current.indent !== baseIndent || current.ordered !== ordered) break;
 
+    const trimmedBody = current.body.trim();
+    const taskMatch = trimmedBody.match(/^\[([ xX])\]\s+(.+)$/);
     const item = {
-      children: parseMarkdownInline(current.body.trim()),
-      nested: [] as MarkdownBlock[]
+      children: parseMarkdownInline(taskMatch?.[2] ?? trimmedBody),
+      nested: [] as MarkdownBlock[],
+      checked: taskMatch ? taskMatch[1]?.toLowerCase() === 'x' : null
     };
     index += 1;
 
@@ -546,6 +553,18 @@ function appendBlock(parent: HTMLElement, block: MarkdownBlock): void {
     }
     for (const item of block.items) {
       const entry = document.createElement('li');
+
+      if (item.checked !== null) {
+        entry.classList.add('task-list-item');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = item.checked;
+        checkbox.disabled = true;
+        checkbox.tabIndex = -1;
+        checkbox.setAttribute('aria-label', item.checked ? 'Completed task' : 'Open task');
+        entry.append(checkbox, document.createTextNode(' '));
+      }
+
       appendInline(entry, item.children);
       for (const nested of item.nested) appendBlock(entry, nested);
       list.append(entry);
