@@ -337,3 +337,20 @@
     gap: 0.4rem;
   }
 }
+
+
+.conversation-preview {
+  display: -webkit-box;
+  margin-top: 0.18rem;
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 0.68rem;
+  font-weight: 450;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.conversation.selected .conversation-preview {
+  color: color-mix(in srgb, var(--ink-muted) 88%, var(--ink));
+}
