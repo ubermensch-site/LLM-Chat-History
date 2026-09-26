@@ -1,4 +1,5 @@
 import type { ArchiveConversation, ArchiveMessage } from '../storage/schema';
+import { conversationPreviewText } from './conversation-preview';
 
 export interface ConversationPreview {
   role: 'You' | 'Assistant' | null;
@@ -15,21 +16,17 @@ export function conversationPreview(
 ): ConversationPreview {
   const latest = [...messages]
     .reverse()
-    .find((message) => compactWhitespace(message.plainText).length > 0);
+    .find((message) =>
+      compactWhitespace(message.markdown ?? message.plainText).length > 0
+    );
 
   if (!latest) {
     return { role: null, text: 'No captured message text yet.' };
   }
 
-  const normalized = compactWhitespace(latest.plainText);
-  const text =
-    normalized.length > maxLength
-      ? `${normalized.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`
-      : normalized;
-
   return {
     role: latest.role === 'user' ? 'You' : 'Assistant',
-    text
+    text: conversationPreviewText(latest.markdown, latest.plainText, maxLength)
   };
 }
 
