@@ -107,27 +107,38 @@ function sortInDocumentOrder(elements: Element[]): Element[] {
   });
 }
 
-function roleFor(element: Element): TurnRole | null {
-  const direct = directRoleFor(element);
-  if (direct) return direct;
+export interface ChatGptContainerRoleSignals {
+  directRole?: TurnRole | null;
+  userMessageBubblePresent?: boolean;
+  explicitUserPresent?: boolean;
+  explicitAssistantPresent?: boolean;
+}
 
-  // In the keyed renderer a turn container can contain several semantic
-  // descendants (labels, controls and message content). Do not let whichever
-  // descendant happens to appear first in DOM order decide the turn role.
-  // A real user-message bubble is the strongest current user signal.
-  if (element.querySelector('[data-user-message-bubble]')) return 'user';
-
-  const explicitUser = element.querySelector(
-    '[data-message-author-role="user"], [data-role="user"], [data-message-author="user"]'
-  );
-  if (explicitUser) return 'user';
-
-  const explicitAssistant = element.querySelector(
-    '[data-message-author-role="assistant"], [data-role="assistant"], [data-message-author="assistant"], [data-conversation-role="assistant"]'
-  );
-  if (explicitAssistant) return 'assistant';
-
+export function inferChatGptContainerRole(
+  signals: ChatGptContainerRoleSignals
+): TurnRole | null {
+  if (signals.directRole) return signals.directRole;
+  if (signals.userMessageBubblePresent) return 'user';
+  if (signals.explicitUserPresent) return 'user';
+  if (signals.explicitAssistantPresent) return 'assistant';
   return null;
+}
+
+function roleFor(element: Element): TurnRole | null {
+  return inferChatGptContainerRole({
+    directRole: directRoleFor(element),
+    userMessageBubblePresent: Boolean(element.querySelector('[data-user-message-bubble]')),
+    explicitUserPresent: Boolean(
+      element.querySelector(
+        '[data-message-author-role="user"], [data-role="user"], [data-message-author="user"]'
+      )
+    ),
+    explicitAssistantPresent: Boolean(
+      element.querySelector(
+        '[data-message-author-role="assistant"], [data-role="assistant"], [data-message-author="assistant"], [data-conversation-role="assistant"]'
+      )
+    )
+  });
 }
 
 function preferredTurnContainer(element: Element): Element {
