@@ -1182,6 +1182,12 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
     'closing find must restore the normal transcript DOM'
   );
 
+  await driverPage.locator('.action-menu > summary').click();
+  await driverPage.locator('#copy-chat-markdown').click();
+  await driverPage.waitForFunction(
+    () => document.getElementById('library-status')?.textContent === 'Conversation copied as Markdown.'
+  );
+
   await driverPage.keyboard.press('Control+K');
   assert.equal(await driverPage.locator('#search').evaluate((element) => document.activeElement === element), true);
   await driverPage.keyboard.type('unique searchable assistant phrase');
