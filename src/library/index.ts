@@ -1147,7 +1147,15 @@ void openArchiveDb()
 
 
 document.addEventListener('keydown', (event) => {
+  const active = document.activeElement;
+  const editingAnotherField =
+    active !== findInput &&
+    (active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement ||
+      active instanceof HTMLSelectElement);
+
   if (
+    !editingAnotherField &&
     (event.ctrlKey || event.metaKey) &&
     !event.altKey &&
     event.key.toLocaleLowerCase() === 'f' &&
