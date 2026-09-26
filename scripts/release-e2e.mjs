@@ -442,7 +442,10 @@ await runScenario('Scenario 1 — existing conversation baseline', async (harnes
 
   const archive = await waitForArchive(
     driverPage,
-    (value) => value.conversations.length === 1 && value.messages.length === 2,
+    (value) =>
+      value.conversations.length === 1 &&
+      value.messages.length === 2 &&
+      value.conversations[0]?.messageCount === 2,
     'baseline archive'
   );
   const conversation = archive.conversations[0];
