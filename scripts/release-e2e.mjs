@@ -1075,6 +1075,13 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
     false,
     'sidebar preview must preserve block boundaries instead of gluing words'
   );
+  assert.equal(
+    await driverPage
+      .locator('#conversation-list .conversation .conversation-title')
+      .evaluate((element) => getComputedStyle(element).whiteSpace),
+    'normal',
+    'sidebar conversation titles must wrap instead of using nowrap ellipsis'
+  );
 
   assert.equal(await driverPage.locator('#transcript img').count(), 0);
   assert.match(await driverPage.locator('#transcript').innerText(), /<img src=x onerror=alert\(1\)>/);
