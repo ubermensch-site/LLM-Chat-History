@@ -24,6 +24,13 @@ function validReport(): LiveQaReport {
         articleTurns: 0,
         userRoleNodes: 2,
         assistantRoleNodes: 2,
+        dataRoleUserNodes: 0,
+        dataRoleAssistantNodes: 0,
+        dataMessageAuthorUserNodes: 0,
+        dataMessageAuthorAssistantNodes: 0,
+        userMessageBubbleNodes: 0,
+        assistantConversationRoleNodes: 0,
+        turnKeyNodes: 0,
         turnIdNodes: 4,
         messageIdNodes: 4,
         conversationTurnTestIds: 4,
@@ -106,6 +113,12 @@ describe('evaluateLiveQaEvidence', () => {
     report.dom.selectors.articleTurns = 0;
     report.dom.selectors.userRoleNodes = 0;
     report.dom.selectors.assistantRoleNodes = 0;
+    report.dom.selectors.dataRoleUserNodes = 0;
+    report.dom.selectors.dataRoleAssistantNodes = 0;
+    report.dom.selectors.dataMessageAuthorUserNodes = 0;
+    report.dom.selectors.dataMessageAuthorAssistantNodes = 0;
+    report.dom.selectors.userMessageBubbleNodes = 0;
+    report.dom.selectors.assistantConversationRoleNodes = 0;
     const result = evaluateLiveQaEvidence(report);
     expect(result.structuralPass).toBe(false);
     expect(result.checks).toContainEqual(expect.objectContaining({ id: 'dom.turn-selectors', status: 'fail' }));
@@ -116,6 +129,7 @@ describe('evaluateLiveQaEvidence', () => {
     report.dom.selectors.turnIdNodes = 0;
     report.dom.selectors.messageIdNodes = 0;
     report.dom.selectors.conversationTurnTestIds = 0;
+    report.dom.selectors.turnKeyNodes = 0;
     const result = evaluateLiveQaEvidence(report);
     expect(result.structuralPass).toBe(true);
     expect(result.checks).toContainEqual(expect.objectContaining({ id: 'dom.stable-ids', status: 'warn' }));

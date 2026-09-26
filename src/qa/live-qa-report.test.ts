@@ -36,6 +36,13 @@ describe('live QA report', () => {
       ['article[data-turn]', 4],
       ['[data-message-author-role="user"]', 2],
       ['[data-message-author-role="assistant"]', 2],
+      ['[data-role="user"]', 2],
+      ['[data-role="assistant"]', 2],
+      ['[data-message-author="user"]', 2],
+      ['[data-message-author="assistant"]', 2],
+      ['[data-user-message-bubble]', 2],
+      ['[data-conversation-role="assistant"]', 2],
+      ['[data-turn-key]', 4],
       ['[data-turn-id]', 4],
       ['[data-message-id]', 4],
       ['[data-testid^="conversation-turn-"]', 4],
@@ -64,6 +71,9 @@ describe('live QA report', () => {
     });
 
     expect(evidence.selectors.sectionUserTurns).toBe(2);
+    expect(evidence.selectors.userMessageBubbleNodes).toBe(2);
+    expect(evidence.selectors.assistantConversationRoleNodes).toBe(2);
+    expect(evidence.selectors.turnKeyNodes).toBe(4);
     expect(evidence.selectors.conversationLinks).toBe(8);
     expect(evidence.stopGenerationControlPresent).toBe(true);
     expect(evidence.mobileAppShellScrollContainerPresent).toBe(true);
@@ -92,6 +102,13 @@ describe('live QA report', () => {
           articleTurns: 4,
           userRoleNodes: 2,
           assistantRoleNodes: 2,
+          dataRoleUserNodes: 2,
+          dataRoleAssistantNodes: 2,
+          dataMessageAuthorUserNodes: 2,
+          dataMessageAuthorAssistantNodes: 2,
+          userMessageBubbleNodes: 2,
+          assistantConversationRoleNodes: 2,
+          turnKeyNodes: 4,
           turnIdNodes: 4,
           messageIdNodes: 4,
           conversationTurnTestIds: 4,
