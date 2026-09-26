@@ -97,13 +97,26 @@ function queryFirst(root: ParentNode, selectors: readonly string[]): Element | n
   return null;
 }
 
-function sortInDocumentOrder(elements: Element[]): Element[] {
-  return elements.sort((a, b) => {
-    if (a === b) return 0;
-    const relation = a.compareDocumentPosition(b);
-    if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
-    if (relation & Node.DOCUMENT_POSITION_PRECEDING) return 1;
-    return 0;
+interface DiscoveredTurn {
+  element: Element;
+  role: TurnRole;
+  strategy: 'turn-shells' | 'keyed-exchanges' | 'semantic-roles';
+}
+
+function compareElementsInDocumentOrder(a: Element, b: Element): number {
+  if (a === b) return 0;
+  const relation = a.compareDocumentPosition(b);
+  if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+  if (relation & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+  return 0;
+}
+
+function sortDiscoveredTurns(turns: DiscoveredTurn[]): DiscoveredTurn[] {
+  return turns.sort((a, b) => {
+    const position = compareElementsInDocumentOrder(a.element, b.element);
+    if (position !== 0) return position;
+    if (a.role === b.role) return 0;
+    return a.role === 'user' ? -1 : 1;
   });
 }
 
@@ -135,30 +148,45 @@ function roleFor(element: Element): TurnRole | null {
     ),
     explicitAssistantPresent: Boolean(
       element.querySelector(
-        '[data-message-author-role="assistant"], [data-role="assistant"], [data-message-author="assistant"], [data-conversation-role="assistant"]'
+        '[data-message-author-role="assistant"], [data-role="assistant"], [data-message-author="assistant"], [data-conversation-role="assistant"], [data-chatgpt-agent-turn-start]'
       )
     )
   });
 }
 
-function preferredTurnContainer(element: Element): Element {
-  return element.closest(KEYED_TURN_SELECTOR) ?? element;
+function keyedRolesFor(element: Element): TurnRole[] {
+  const roles: TurnRole[] = [];
+  if (
+    element.querySelector(
+      '[data-user-message-bubble], [data-content-search-unit-key$=":user"]'
+    )
+  ) {
+    roles.push('user');
+  }
+
+  if (
+    element.querySelector(
+      '[data-conversation-role="assistant"], [data-chatgpt-agent-turn-start], [data-content-search-unit-key$=":assistant"], [data-markdown-text-style="assistant-message"]'
+    )
+  ) {
+    roles.push('assistant');
+  }
+
+  return roles;
 }
 
-function dedupeNestedTurnElements(elements: Element[]): Element[] {
-  return elements.filter((candidate, index, all) => {
-    const role = roleFor(candidate);
-    if (!role) return false;
-
-    return !all.some((other, otherIndex) =>
-      otherIndex !== index &&
-      other.contains(candidate) &&
-      roleFor(other) === role
-    );
+function dedupeDiscoveredTurns(turns: DiscoveredTurn[]): DiscoveredTurn[] {
+  const seen = new Map<Element, Set<TurnRole>>();
+  return turns.filter((turn) => {
+    const roles = seen.get(turn.element) ?? new Set<TurnRole>();
+    if (roles.has(turn.role)) return false;
+    roles.add(turn.role);
+    seen.set(turn.element, roles);
+    return true;
   });
 }
 
-function collectTurnElements(): Element[] {
+function collectTurns(): DiscoveredTurn[] {
   for (const strategy of TURN_DISCOVERY_STRATEGIES) {
     const found = new Set<Element>();
 
@@ -166,16 +194,45 @@ function collectTurnElements(): Element[] {
       document.querySelectorAll(selector).forEach((element) => found.add(element));
     }
 
-    const candidates =
-      strategy.id === 'semantic-roles'
-        ? [...found].map(preferredTurnContainer)
-        : [...found];
+    const discovered: DiscoveredTurn[] = [];
 
-    const recognized = sortInDocumentOrder(
-      [...new Set(candidates)].filter((element) => roleFor(element) !== null)
-    );
+    if (strategy.id === 'keyed-exchanges') {
+      for (const element of found) {
+        for (const role of keyedRolesFor(element)) {
+          discovered.push({ element, role, strategy: 'keyed-exchanges' });
+        }
+      }
+    } else if (strategy.id === 'turn-shells') {
+      for (const element of found) {
+        // A current keyed exchange can contain both roles. Let the dedicated
+        // keyed strategy split it into two logical turns instead of collapsing
+        // the exchange to whichever role is encountered first.
+        if (element.matches(KEYED_TURN_SELECTOR) || element.closest(KEYED_TURN_SELECTOR)) {
+          continue;
+        }
+        const role = roleFor(element);
+        if (role) discovered.push({ element, role, strategy: 'turn-shells' });
+      }
+    } else {
+      const keyedContainers = new Set<Element>();
+      for (const element of found) {
+        const keyed = element.closest(KEYED_TURN_SELECTOR);
+        if (keyed) {
+          keyedContainers.add(keyed);
+          continue;
+        }
+        const role = directRoleFor(element) ?? roleFor(element);
+        if (role) discovered.push({ element, role, strategy: 'semantic-roles' });
+      }
+      for (const keyed of keyedContainers) {
+        for (const role of keyedRolesFor(keyed)) {
+          discovered.push({ element: keyed, role, strategy: 'semantic-roles' });
+        }
+      }
+    }
 
-    if (recognized.length > 0) return dedupeNestedTurnElements(recognized);
+    const normalized = sortDiscoveredTurns(dedupeDiscoveredTurns(discovered));
+    if (normalized.length > 0) return normalized;
   }
 
   return [];
@@ -188,6 +245,7 @@ function messageNodeFor(element: Element, role: TurnRole): Element | null {
 
   if (role === 'user') {
     return (
+      element.querySelector('[data-content-search-unit-key$=":user"]') ??
       element.querySelector('[data-user-message-bubble]') ??
       element.querySelector('[data-message-author-role="user"]') ??
       element.querySelector('[data-role="user"]') ??
@@ -197,6 +255,7 @@ function messageNodeFor(element: Element, role: TurnRole): Element | null {
   }
 
   return (
+    element.querySelector('[data-content-search-unit-key$=":assistant"]') ??
     element.querySelector('[data-message-author-role="assistant"]') ??
     element.querySelector('[data-role="assistant"]') ??
     element.querySelector('[data-message-author="assistant"]') ??
@@ -382,9 +441,9 @@ export class ChatGptAdapter implements ProviderAdapter {
   }
 
   getConversationScrollContainer(): HTMLElement | null {
-    const turns = collectTurnElements();
+    const turns = collectTurns();
     for (const turn of turns) {
-      const scrollable = nearestScrollableAncestor(turn);
+      const scrollable = nearestScrollableAncestor(turn.element);
       if (scrollable) return scrollable;
     }
 
@@ -396,24 +455,23 @@ export class ChatGptAdapter implements ProviderAdapter {
     const identity = this.getConversationIdentity();
     if (!identity) return [];
 
-    const elements = collectTurnElements();
+    const discoveredTurns = collectTurns();
     const generating = hasGenerationControl();
     let lastAssistantIndex = -1;
 
-    elements.forEach((element, index) => {
-      if (roleFor(element) === 'assistant') lastAssistantIndex = index;
+    discoveredTurns.forEach((turn, index) => {
+      if (turn.role === 'assistant') lastAssistantIndex = index;
     });
 
     const turns: ProviderTurnObservation[] = [];
 
-    elements.forEach((element, index) => {
-      const role = roleFor(element);
-      if (!role) return;
-
+    discoveredTurns.forEach((turn, index) => {
+      const { element, role } = turn;
       const providerMessageId = providerMessageIdFor(element, role);
+      const turnKey = closestAttribute(element, 'data-turn-key');
       const providerTurnId =
+        (turnKey ? `group:${role}:${turnKey}` : null) ??
         closestAttribute(element, 'data-turn-id') ??
-        closestAttribute(element, 'data-turn-key') ??
         providerMessageId ??
         element.getAttribute('data-testid') ??
         `dom:${role}:${index}`;
@@ -459,7 +517,7 @@ export class ChatGptAdapter implements ProviderAdapter {
       return { state: 'error', code: 'unsupported-location', observedAt: isoNow() };
     }
 
-    const turns = collectTurnElements();
+    const turns = collectTurns();
     let base: AdapterHealth;
     if (identity.providerConversationId && turns.length === 0) {
       base = {
@@ -469,14 +527,12 @@ export class ChatGptAdapter implements ProviderAdapter {
         observedAt: isoNow()
       };
     } else {
-      const missingStableIds = turns.some((element, index) => {
-        const role = roleFor(element);
-        if (!role) return false;
-        const providerMessageId = providerMessageIdFor(element, role);
-        return !closestAttribute(element, 'data-turn-id') &&
-          !closestAttribute(element, 'data-turn-key') &&
+      const missingStableIds = turns.some((turn, index) => {
+        const providerMessageId = providerMessageIdFor(turn.element, turn.role);
+        return !closestAttribute(turn.element, 'data-turn-id') &&
+          !closestAttribute(turn.element, 'data-turn-key') &&
           !providerMessageId &&
-          !element.getAttribute('data-testid') &&
+          !turn.element.getAttribute('data-testid') &&
           index >= 0;
       });
 
