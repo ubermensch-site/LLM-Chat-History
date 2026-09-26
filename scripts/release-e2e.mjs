@@ -87,6 +87,9 @@ async function renderConversation(page, {
         answer.className = 'markdown';
 
         if (turn.richFixture) {
+          const searchParagraph = document.createElement('p');
+          searchParagraph.textContent = turn.text;
+
           const heading = document.createElement('h2');
           heading.textContent = 'Reader structure';
 
@@ -135,7 +138,7 @@ async function renderConversation(page, {
           tbody.append(bodyRow);
 
           table.append(thead, tbody);
-          answer.append(heading, paragraph, list, pre, quote, table);
+          answer.append(searchParagraph, heading, paragraph, list, pre, quote, table);
         } else {
           answer.textContent = turn.text;
         }
