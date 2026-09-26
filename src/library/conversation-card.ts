@@ -60,5 +60,10 @@ export function conversationStatusLabel(conversation: ArchiveConversation): stri
 }
 
 export function providerDisplayName(providerId: ArchiveConversation['providerId']): string {
-  return providerId === 'chatgpt' ? 'ChatGPT' : providerId;
+  const normalized = String(providerId).trim().toLowerCase();
+  if (normalized === 'chatgpt') return 'ChatGPT';
+  if (normalized === 'claude') return 'Claude';
+  if (normalized === 'gemini') return 'Gemini';
+  if (normalized === 'grok') return 'Grok';
+  return String(providerId);
 }
