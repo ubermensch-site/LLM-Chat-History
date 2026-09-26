@@ -747,3 +747,12 @@
   accent-color: var(--accent);
   opacity: 0.86;
 }
+
+
+.organizer-panel:not([open]) {
+  display: none;
+}
+
+.organizer-panel[open] {
+  display: block;
+}
