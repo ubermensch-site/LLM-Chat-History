@@ -756,3 +756,14 @@
 .organizer-panel[open] {
   display: block;
 }
+
+
+.conversation-title {
+  display: -webkit-box;
+  overflow: hidden;
+  white-space: normal;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
