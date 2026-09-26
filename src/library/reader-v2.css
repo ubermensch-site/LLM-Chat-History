@@ -212,15 +212,14 @@
   align-items: center;
   gap: 0.18rem;
   margin-top: 0.55rem;
-  opacity: 0;
-  transform: translateY(-2px);
-  transition: opacity 120ms ease, transform 120ms ease;
+  opacity: 0.7;
+  transform: none;
+  transition: opacity 120ms ease;
 }
 
 .message:hover .message-actions,
 .message:focus-within .message-actions {
   opacity: 1;
-  transform: none;
 }
 
 .message-action {
