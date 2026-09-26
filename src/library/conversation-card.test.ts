@@ -46,10 +46,15 @@ function conversation(overrides: Partial<ArchiveConversation>): ArchiveConversat
 }
 
 describe('conversation card presentation', () => {
-  it('uses the latest non-empty message and compacts whitespace', () => {
+  it('uses the latest non-empty message and prefers Markdown-aware spacing', () => {
     const preview = conversationPreview([
       message({ plainText: 'First prompt', role: 'user' }),
-      message({ id: 'm2', role: 'assistant', plainText: '  A useful\n\nanswer   with spacing.  ' })
+      message({
+        id: 'm2',
+        role: 'assistant',
+        plainText: 'A usefulanswerwith spacing.',
+        markdown: 'A useful\n\n## answer\n\nwith **spacing**.'
+      })
     ]);
 
     expect(preview).toEqual({ role: 'Assistant', text: 'A useful answer with spacing.' });
