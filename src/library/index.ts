@@ -45,6 +45,7 @@ import {
   type LibraryNavigationScope
 } from './library-navigation-state';
 import { requestMirrorRefresh, requestMirrorRefreshes } from './mirror-refresh';
+import { providerDisplayName } from './conversation-card';
 import { conversationPreviewText } from './conversation-preview';
 import { renderMarkdownInto } from './markdown-renderer';
 import { filterLibraryRecords, type LibraryRecord } from './search';
@@ -58,15 +59,6 @@ function byId<T extends HTMLElement>(id: string): T {
 function humanDate(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
-}
-
-function providerLabel(providerId: string): string {
-  const normalized = providerId.trim().toLowerCase();
-  if (normalized === 'chatgpt') return 'ChatGPT';
-  if (normalized === 'claude') return 'Claude';
-  if (normalized === 'gemini') return 'Gemini';
-  if (normalized === 'grok') return 'Grok';
-  return providerId;
 }
 
 function downloadText(filename: string, content: string, type: string): void {
@@ -314,7 +306,7 @@ function renderTranscript(record: LibraryRecord): void {
     .join(' · ');
   title.textContent = conversationDisplayTitle(conversation);
   const archived = conversation.archivedAt ? ' · Archived' : '';
-  meta.textContent = `${providerLabel(conversation.providerId)} · ${conversation.messageCount} messages · Last captured ${humanDate(conversation.lastObservedAt)}${archived}`;
+  meta.textContent = `${providerDisplayName(conversation.providerId)} · ${conversation.messageCount} messages · Last captured ${humanDate(conversation.lastObservedAt)}${archived}`;
   transcript.replaceChildren();
   renderManagementActions();
 
@@ -341,7 +333,7 @@ function renderTranscript(record: LibraryRecord): void {
     const role = document.createElement('span');
     role.className = 'role';
     role.textContent =
-      message.role === 'user' ? 'You' : providerLabel(conversation.providerId);
+      message.role === 'user' ? 'You' : providerDisplayName(conversation.providerId);
 
     const time = document.createElement('time');
     time.className = 'time';
