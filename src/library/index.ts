@@ -45,6 +45,7 @@ import {
   type LibraryNavigationScope
 } from './library-navigation-state';
 import { requestMirrorRefresh, requestMirrorRefreshes } from './mirror-refresh';
+import { renderMarkdownToSafeHtml } from './markdown-renderer';
 import { filterLibraryRecords, type LibraryRecord } from './search';
 
 function byId<T extends HTMLElement>(id: string): T {
@@ -341,7 +342,15 @@ function renderTranscript(record: LibraryRecord): void {
 
     const content = document.createElement('div');
     content.className = 'content message-body';
-    content.textContent = message.plainText || '(empty rendered message)';
+    const capturedMarkdown = message.markdown?.trim();
+    if (capturedMarkdown) {
+      content.classList.add('markdown-content');
+      content.innerHTML = renderMarkdownToSafeHtml(capturedMarkdown);
+    } else {
+      content.textContent = message.plainText || '(empty rendered message)';
+    }
+
+    const messageExportText = capturedMarkdown || message.plainText || '';
 
     const actions = document.createElement('div');
     actions.className = 'message-actions';
@@ -353,7 +362,7 @@ function renderTranscript(record: LibraryRecord): void {
     copy.className = 'message-action';
     copy.textContent = 'Copy';
     copy.addEventListener('click', () => {
-      void navigator.clipboard.writeText(message.plainText || message.markdown || '').then(
+      void navigator.clipboard.writeText(messageExportText).then(
         () => setLibraryStatus('Message copied.'),
         () => setLibraryStatus('Could not copy this message.', true)
       );
@@ -365,10 +374,11 @@ function renderTranscript(record: LibraryRecord): void {
     exportMessage.textContent = 'Export';
     exportMessage.addEventListener('click', () => {
       const label = message.role === 'user' ? 'user' : 'assistant';
+      const markdownExport = Boolean(capturedMarkdown);
       downloadText(
-        `${label}-message-${message.id.slice(0, 8)}.txt`,
-        message.plainText || message.markdown || '',
-        'text/plain;charset=utf-8'
+        `${label}-message-${message.id.slice(0, 8)}.${markdownExport ? 'md' : 'txt'}`,
+        messageExportText,
+        markdownExport ? 'text/markdown;charset=utf-8' : 'text/plain;charset=utf-8'
       );
       setLibraryStatus('Message exported.');
     });
