@@ -59,6 +59,15 @@ function humanDate(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
+function providerLabel(providerId: string): string {
+  const normalized = providerId.trim().toLowerCase();
+  if (normalized === 'chatgpt') return 'ChatGPT';
+  if (normalized === 'claude') return 'Claude';
+  if (normalized === 'gemini') return 'Gemini';
+  if (normalized === 'grok') return 'Grok';
+  return providerId;
+}
+
 function downloadText(filename: string, content: string, type: string): void {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -303,8 +312,9 @@ function renderTranscript(record: LibraryRecord): void {
     .filter(Boolean)
     .join(' · ');
   title.textContent = conversationDisplayTitle(conversation);
-  const archived = conversation.archivedAt ? ` · Archived ${humanDate(conversation.archivedAt)}` : '';
-  meta.textContent = `${conversation.providerId} · ${conversation.messageCount} messages · ${conversation.recordingState} · ${organization} · Last captured ${humanDate(conversation.lastObservedAt)}${archived}`;
+  const archived = conversation.archivedAt ? ' · Archived' : '';
+  const organizationHint = organization && organization !== 'Unsorted' ? ` · ${organization}` : '';
+  meta.textContent = `${providerLabel(conversation.providerId)} · ${conversation.messageCount} messages · Last captured ${humanDate(conversation.lastObservedAt)}${organizationHint}${archived}`;
   transcript.replaceChildren();
   renderManagementActions();
 
