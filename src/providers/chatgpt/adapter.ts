@@ -13,6 +13,7 @@ import {
   ASSISTANT_CONTENT_SELECTORS,
   CHATGPT_HOSTS,
   GENERATION_CONTROL_SELECTORS,
+  KEYED_TURN_SELECTOR,
   ROLE_FALLBACK_SELECTOR,
   TURN_DISCOVERY_STRATEGIES,
   USER_CONTENT_SELECTORS
@@ -118,6 +119,10 @@ function roleFor(element: Element): TurnRole | null {
   return null;
 }
 
+function preferredTurnContainer(element: Element): Element {
+  return element.closest(KEYED_TURN_SELECTOR) ?? element;
+}
+
 function dedupeNestedTurnElements(elements: Element[]): Element[] {
   return elements.filter((candidate, index, all) => {
     const role = roleFor(candidate);
@@ -139,8 +144,13 @@ function collectTurnElements(): Element[] {
       document.querySelectorAll(selector).forEach((element) => found.add(element));
     }
 
+    const candidates =
+      strategy.id === 'semantic-roles'
+        ? [...found].map(preferredTurnContainer)
+        : [...found];
+
     const recognized = sortInDocumentOrder(
-      [...found].filter((element) => roleFor(element) !== null)
+      [...new Set(candidates)].filter((element) => roleFor(element) !== null)
     );
 
     if (recognized.length > 0) return dedupeNestedTurnElements(recognized);
@@ -181,8 +191,15 @@ function providerMessageIdFor(element: Element, role: TurnRole): string | null {
 }
 
 function assistantAnswerNodeFor(element: Element): Element | null {
-  const roleNode = messageNodeFor(element, 'assistant') ?? element;
-  return queryFirst(roleNode, ASSISTANT_CONTENT_SELECTORS);
+  // Newer ChatGPT renderers may expose a small semantic accessibility marker
+  // (for example, "ChatGPT said:") separately from the rendered answer body.
+  // Search the full turn container first so that marker text is never mistaken
+  // for the actual assistant response.
+  const fromTurn = queryFirst(element, ASSISTANT_CONTENT_SELECTORS);
+  if (fromTurn) return fromTurn;
+
+  const roleNode = messageNodeFor(element, 'assistant');
+  return roleNode ? queryFirst(roleNode, ASSISTANT_CONTENT_SELECTORS) : null;
 }
 
 function contentNodeFor(element: Element, role: TurnRole): Element | null {
