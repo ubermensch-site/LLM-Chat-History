@@ -425,20 +425,22 @@ function appendInline(parent: HTMLElement, nodes: readonly MarkdownInlineNode[])
       continue;
     }
 
+    if (node.type === 'link') {
+      const link = document.createElement('a');
+      link.href = node.target;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      appendInline(link, node.children);
+      parent.append(link);
+      continue;
+    }
+
     const element =
       node.type === 'strong'
         ? document.createElement('strong')
         : node.type === 'emphasis'
           ? document.createElement('em')
-          : node.type === 'delete'
-            ? document.createElement('del')
-            : document.createElement('a');
-
-    if (node.type === 'link') {
-      element.href = node.target;
-      element.target = '_blank';
-      element.rel = 'noopener noreferrer';
-    }
+          : document.createElement('del');
 
     appendInline(element, node.children);
     parent.append(element);
