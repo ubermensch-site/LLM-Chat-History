@@ -732,3 +732,18 @@
     justify-content: flex-start;
   }
 }
+
+
+.markdown-content .task-list-item {
+  list-style: none;
+  margin-left: -1.2rem;
+}
+
+.markdown-content .task-list-item > input[type='checkbox'] {
+  width: 0.95rem;
+  height: 0.95rem;
+  margin: 0 0.4rem 0 0;
+  vertical-align: -0.12rem;
+  accent-color: var(--accent);
+  opacity: 0.86;
+}
