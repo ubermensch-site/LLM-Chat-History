@@ -45,7 +45,10 @@ const DOM_KEYS = [
 ] as const;
 const SELECTOR_KEYS = [
   'sectionUserTurns', 'sectionAssistantTurns', 'articleTurns', 'userRoleNodes',
-  'assistantRoleNodes', 'turnIdNodes', 'messageIdNodes', 'conversationTurnTestIds',
+  'assistantRoleNodes', 'dataRoleUserNodes', 'dataRoleAssistantNodes',
+  'dataMessageAuthorUserNodes', 'dataMessageAuthorAssistantNodes',
+  'userMessageBubbleNodes', 'assistantConversationRoleNodes', 'turnKeyNodes',
+  'turnIdNodes', 'messageIdNodes', 'conversationTurnTestIds',
   'collapsibleUserContent', 'markdownWrappers', 'proseWrappers', 'conversationLinks'
 ] as const;
 const RUNTIME_KEYS = [
@@ -188,7 +191,18 @@ export function evaluateLiveQaEvidence(
     push(checks, 'storage.health', 'pass', 'Canonical local persistence reports healthy.');
   }
 
-  const semanticTurnNodes = report.dom.selectors.sectionUserTurns + report.dom.selectors.sectionAssistantTurns + report.dom.selectors.articleTurns + report.dom.selectors.userRoleNodes + report.dom.selectors.assistantRoleNodes;
+  const semanticTurnNodes =
+    report.dom.selectors.sectionUserTurns +
+    report.dom.selectors.sectionAssistantTurns +
+    report.dom.selectors.articleTurns +
+    report.dom.selectors.userRoleNodes +
+    report.dom.selectors.assistantRoleNodes +
+    report.dom.selectors.dataRoleUserNodes +
+    report.dom.selectors.dataRoleAssistantNodes +
+    report.dom.selectors.dataMessageAuthorUserNodes +
+    report.dom.selectors.dataMessageAuthorAssistantNodes +
+    report.dom.selectors.userMessageBubbleNodes +
+    report.dom.selectors.assistantConversationRoleNodes;
   if (report.runtime.renderedTurnCount > 0 && semanticTurnNodes === 0) {
     push(checks, 'dom.turn-selectors', 'fail', 'Recorder reports rendered turns but no supported semantic turn selectors are present.');
   } else if (report.runtime.renderedTurnCount > 0) {
@@ -197,7 +211,11 @@ export function evaluateLiveQaEvidence(
     push(checks, 'dom.turn-selectors', 'warn', 'No rendered turns are present in this snapshot.');
   }
 
-  const stableIdNodes = report.dom.selectors.turnIdNodes + report.dom.selectors.messageIdNodes + report.dom.selectors.conversationTurnTestIds;
+  const stableIdNodes =
+    report.dom.selectors.turnKeyNodes +
+    report.dom.selectors.turnIdNodes +
+    report.dom.selectors.messageIdNodes +
+    report.dom.selectors.conversationTurnTestIds;
   if (report.runtime.renderedTurnCount > 0 && stableIdNodes === 0) {
     push(checks, 'dom.stable-ids', 'warn', 'Rendered turns expose no observed stable-ID selector family; fallback identity needs manual review.');
   } else if (stableIdNodes > 0) {
