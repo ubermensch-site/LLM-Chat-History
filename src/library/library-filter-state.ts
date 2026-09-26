@@ -123,6 +123,17 @@ export function sortLibraryRecords(
   sort: LibrarySort
 ): LibraryRecord[] {
   return [...records].sort((a, b) => {
+    const aPinned = Boolean(a.conversation.pinnedAt);
+    const bPinned = Boolean(b.conversation.pinnedAt);
+    if (aPinned !== bPinned) return aPinned ? -1 : 1;
+
+    if (aPinned && bPinned) {
+      const byPinTime = (b.conversation.pinnedAt ?? '').localeCompare(
+        a.conversation.pinnedAt ?? ''
+      );
+      if (byPinTime !== 0) return byPinTime;
+    }
+
     if (sort === 'oldest') {
       return (
         a.conversation.updatedAt.localeCompare(b.conversation.updatedAt) ||
