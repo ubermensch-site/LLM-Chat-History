@@ -60,6 +60,17 @@ describe('conversation card presentation', () => {
     expect(preview).toEqual({ role: 'Assistant', text: 'A useful answer with spacing.' });
   });
 
+  it('falls back to plain text when Markdown is present but empty', () => {
+    const preview = conversationPreview([
+      message({ role: 'assistant', markdown: '', plainText: 'Fallback assistant preview' })
+    ]);
+
+    expect(preview).toEqual({
+      role: 'Assistant',
+      text: 'Fallback assistant preview'
+    });
+  });
+
   it('truncates long previews without exposing extra content', () => {
     const preview = conversationPreview([message({ plainText: 'abcdefghijklmnopqrstuvwxyz' })], 10);
     expect(preview).toEqual({ role: 'You', text: 'abcdefghi…' });
