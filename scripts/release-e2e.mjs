@@ -85,7 +85,61 @@ async function renderConversation(page, {
         }
         const answer = document.createElement('div');
         answer.className = 'markdown';
-        answer.textContent = turn.text;
+
+        if (turn.richFixture) {
+          const heading = document.createElement('h2');
+          heading.textContent = 'Reader structure';
+
+          const paragraph = document.createElement('p');
+          paragraph.append(
+            document.createTextNode('Structured '),
+            Object.assign(document.createElement('strong'), { textContent: 'Markdown' }),
+            document.createTextNode(' should stay readable.')
+          );
+
+          const list = document.createElement('ul');
+          for (const itemText of ['First item', 'Second item']) {
+            const item = document.createElement('li');
+            item.textContent = itemText;
+            list.append(item);
+          }
+
+          const pre = document.createElement('pre');
+          const code = document.createElement('code');
+          code.className = 'language-ts';
+          code.textContent = 'const formatted = true;';
+          pre.append(code);
+
+          const quote = document.createElement('blockquote');
+          const quoteParagraph = document.createElement('p');
+          quoteParagraph.textContent = 'Readable quote';
+          quote.append(quoteParagraph);
+
+          const table = document.createElement('table');
+          const thead = document.createElement('thead');
+          const headRow = document.createElement('tr');
+          for (const value of ['Name', 'Value']) {
+            const cell = document.createElement('th');
+            cell.textContent = value;
+            headRow.append(cell);
+          }
+          thead.append(headRow);
+
+          const tbody = document.createElement('tbody');
+          const bodyRow = document.createElement('tr');
+          for (const value of ['Status', 'Ready']) {
+            const cell = document.createElement('td');
+            cell.textContent = value;
+            bodyRow.append(cell);
+          }
+          tbody.append(bodyRow);
+
+          table.append(thead, tbody);
+          answer.append(heading, paragraph, list, pre, quote, table);
+        } else {
+          answer.textContent = turn.text;
+        }
+
         message.append(answer);
       }
 
@@ -981,13 +1035,14 @@ await runScenario('Scenario 9 — virtualized historical import and idempotency'
 await runScenario('Scenario 10 — Library search, export, appearance and keyboard', async (harness) => {
   const { page, driverPage } = await harness.open('https://chatgpt.com/c/e2e-library');
   await renderConversation(page, {
-    title: 'Library automation',
+    title: 'Check Repository Access And Build A Resilient Reader Experience',
     conversationId: 'e2e-library',
     turns: [
       userTurn('l-u1', '<img src=x onerror=alert(1)> literal user content'),
       assistantTurn('l-a1', 'l-m1', 'unique searchable assistant phrase', {
         activities: [{ text: 'Indexed fixture work', testId: 'work-step' }],
-        modelLabel: 'GPT-5.6'
+        modelLabel: 'GPT-5.6',
+        richFixture: true
       })
     ]
   });
@@ -1007,6 +1062,52 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   assert.match(await driverPage.locator('#transcript').innerText(), /<img src=x onerror=alert\(1\)>/);
   assert.match(await driverPage.locator('#transcript').innerText(), /What ChatGPT showed while working \(1\)/);
   assert.match(await driverPage.locator('#transcript').innerText(), /Model shown by ChatGPT: GPT-5\.6/);
+
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .markdown-content h2').count(),
+    1,
+    'captured Markdown heading must render as a real heading'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .markdown-content ul li').count(),
+    2,
+    'captured Markdown list must render as list items'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .code-block code').innerText(),
+    'const formatted = true;',
+    'captured fenced code must render in a code block'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .code-copy-button').isVisible(),
+    true,
+    'code block copy action must be visible'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .markdown-content blockquote').count(),
+    1,
+    'captured blockquote must retain semantic structure'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript .assistant .markdown-content table').count(),
+    1,
+    'captured Markdown table must render as a real table'
+  );
+  assert.equal(
+    await driverPage.locator('#transcript').innerText().then((value) => value.includes('## Reader structure')),
+    false,
+    'Reader must not expose raw Markdown heading tokens'
+  );
+
+  assert.equal(
+    await driverPage.locator('#title').innerText(),
+    'Check Repository Access And Build A Resilient Reader Experience'
+  );
+  assert.equal(
+    await driverPage.locator('#title').evaluate((element) => getComputedStyle(element).whiteSpace),
+    'normal',
+    'desktop conversation title must wrap instead of using nowrap ellipsis'
+  );
 
   await driverPage.keyboard.press('Control+K');
   assert.equal(await driverPage.locator('#search').evaluate((element) => document.activeElement === element), true);
@@ -1068,7 +1169,10 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
   await driverPage.waitForFunction(() => window.matchMedia('(max-width: 760px)').matches);
   await driverPage.waitForTimeout(500);
   assert.equal(await driverPage.locator('#title').isVisible(), true, 'mobile conversation title must remain visible');
-  assert.equal(await driverPage.locator('#title').innerText(), 'Library automation');
+  assert.equal(
+    await driverPage.locator('#title').innerText(),
+    'Check Repository Access And Build A Resilient Reader Experience'
+  );
   assert.equal(
     await driverPage.locator('.mobile-actions-toggle').isVisible(),
     true,
