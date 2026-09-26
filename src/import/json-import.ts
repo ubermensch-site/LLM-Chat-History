@@ -208,11 +208,15 @@ function parseConversation(value: unknown): ArchiveConversation {
     'conversation.provisionalKey'
   );
   const customTitle = optionalString(input.customTitle, 'conversation.customTitle');
+  const favoriteAt = optionalTimestamp(input.favoriteAt, 'conversation.favoriteAt');
+  const pinnedAt = optionalTimestamp(input.pinnedAt, 'conversation.pinnedAt');
   const archivedAt = optionalTimestamp(input.archivedAt, 'conversation.archivedAt');
   const projectId = optionalString(input.projectId, 'conversation.projectId');
   const folderId = optionalString(input.folderId, 'conversation.folderId');
   const tags = parseTags(input.tags, 'conversation.tags');
   if (customTitle) conversation.customTitle = customTitle;
+  if (favoriteAt) conversation.favoriteAt = favoriteAt;
+  if (pinnedAt) conversation.pinnedAt = pinnedAt;
   if (archivedAt) conversation.archivedAt = archivedAt;
   if (projectId) conversation.projectId = projectId;
   if (folderId) conversation.folderId = folderId;
