@@ -154,25 +154,69 @@ function roleFor(element: Element): TurnRole | null {
   });
 }
 
-function keyedRolesFor(element: Element): TurnRole[] {
+export interface ChatGptKeyedExchangeSignals {
+  userMessageBubblePresent?: boolean;
+  userContentUnitPresent?: boolean;
+  assistantRolePresent?: boolean;
+  assistantStartPresent?: boolean;
+  assistantContentUnitPresent?: boolean;
+  assistantMessageBodyPresent?: boolean;
+}
+
+export function inferChatGptKeyedRoles(
+  signals: ChatGptKeyedExchangeSignals
+): TurnRole[] {
   const roles: TurnRole[] = [];
-  if (
-    element.querySelector(
-      '[data-user-message-bubble], [data-content-search-unit-key$=":user"]'
-    )
-  ) {
+  if (signals.userMessageBubblePresent || signals.userContentUnitPresent) {
     roles.push('user');
   }
-
   if (
-    element.querySelector(
-      '[data-conversation-role="assistant"], [data-chatgpt-agent-turn-start], [data-content-search-unit-key$=":assistant"], [data-markdown-text-style="assistant-message"]'
-    )
+    signals.assistantRolePresent ||
+    signals.assistantStartPresent ||
+    signals.assistantContentUnitPresent ||
+    signals.assistantMessageBodyPresent
   ) {
     roles.push('assistant');
   }
-
   return roles;
+}
+
+export function chatGptProviderTurnId(input: {
+  role: TurnRole;
+  turnKey?: string | null;
+  turnId?: string | null;
+  providerMessageId?: string | null;
+  testId?: string | null;
+  index: number;
+}): string {
+  if (input.turnKey) return `group:${input.role}:${input.turnKey}`;
+  return (
+    input.turnId ??
+    input.providerMessageId ??
+    input.testId ??
+    `dom:${input.role}:${input.index}`
+  );
+}
+
+function keyedRolesFor(element: Element): TurnRole[] {
+  return inferChatGptKeyedRoles({
+    userMessageBubblePresent: Boolean(element.querySelector('[data-user-message-bubble]')),
+    userContentUnitPresent: Boolean(
+      element.querySelector('[data-content-search-unit-key$=":user"]')
+    ),
+    assistantRolePresent: Boolean(
+      element.querySelector('[data-conversation-role="assistant"]')
+    ),
+    assistantStartPresent: Boolean(
+      element.querySelector('[data-chatgpt-agent-turn-start]')
+    ),
+    assistantContentUnitPresent: Boolean(
+      element.querySelector('[data-content-search-unit-key$=":assistant"]')
+    ),
+    assistantMessageBodyPresent: Boolean(
+      element.querySelector('[data-markdown-text-style="assistant-message"]')
+    )
+  });
 }
 
 function dedupeDiscoveredTurns(turns: DiscoveredTurn[]): DiscoveredTurn[] {
@@ -469,12 +513,14 @@ export class ChatGptAdapter implements ProviderAdapter {
       const { element, role } = turn;
       const providerMessageId = providerMessageIdFor(element, role);
       const turnKey = closestAttribute(element, 'data-turn-key');
-      const providerTurnId =
-        (turnKey ? `group:${role}:${turnKey}` : null) ??
-        closestAttribute(element, 'data-turn-id') ??
-        providerMessageId ??
-        element.getAttribute('data-testid') ??
-        `dom:${role}:${index}`;
+      const providerTurnId = chatGptProviderTurnId({
+        role,
+        turnKey,
+        turnId: closestAttribute(element, 'data-turn-id'),
+        providerMessageId,
+        testId: element.getAttribute('data-testid'),
+        index
+      });
       const observedAt = isoNow();
       const contentNode = contentNodeFor(element, role);
       const answerNode = role === 'assistant' ? assistantAnswerNodeFor(element) : null;
