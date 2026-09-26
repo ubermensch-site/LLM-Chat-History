@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { inferChatGptTurnRole, normalizeVisibleModelLabel, parseChatGptConversationId } from './adapter';
-import { TURN_DISCOVERY_STRATEGIES } from './selectors';
+import {
+  ASSISTANT_CONTENT_SELECTORS,
+  KEYED_TURN_SELECTOR,
+  TURN_DISCOVERY_STRATEGIES
+} from './selectors';
 
 describe('parseChatGptConversationId', () => {
   it('reads a standard ChatGPT conversation id', () => {
@@ -85,6 +89,19 @@ describe('ChatGPT role discovery compatibility', () => {
     ]);
     expect(TURN_DISCOVERY_STRATEGIES[1]?.selectors).toContain('[data-user-message-bubble]');
     expect(TURN_DISCOVERY_STRATEGIES[1]?.selectors).toContain(
+      '[data-conversation-role="assistant"]'
+    );
+  });
+});
+
+
+describe('ChatGPT keyed-renderer extraction guards', () => {
+  it('uses keyed turns as the semantic discovery container', () => {
+    expect(KEYED_TURN_SELECTOR).toBe('[data-turn-key]');
+  });
+
+  it('does not treat the assistant role marker as answer content', () => {
+    expect(ASSISTANT_CONTENT_SELECTORS).not.toContain(
       '[data-conversation-role="assistant"]'
     );
   });
