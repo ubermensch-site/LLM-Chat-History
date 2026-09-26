@@ -1060,6 +1060,21 @@ await runScenario('Scenario 10 — Library search, export, appearance and keyboa
 
   await driverPage.reload({ waitUntil: 'domcontentloaded' });
   await driverPage.waitForFunction(() => document.querySelectorAll('#transcript .message').length === 2);
+  await driverPage.waitForFunction(() =>
+    Boolean(document.querySelector('#conversation-list .conversation[data-card-enhanced]'))
+  );
+  const sidebarPreview = await driverPage
+    .locator('#conversation-list .conversation .conversation-preview')
+    .innerText();
+  assert.match(
+    sidebarPreview,
+    /unique searchable assistant phrase Reader structure Structured Markdown should stay readable/i
+  );
+  assert.equal(
+    sidebarPreview.includes('phraseReader'),
+    false,
+    'sidebar preview must preserve block boundaries instead of gluing words'
+  );
 
   assert.equal(await driverPage.locator('#transcript img').count(), 0);
   assert.match(await driverPage.locator('#transcript').innerText(), /<img src=x onerror=alert\(1\)>/);
