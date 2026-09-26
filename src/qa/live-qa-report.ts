@@ -26,6 +26,13 @@ export interface LiveQaSelectorCounts {
   articleTurns: number;
   userRoleNodes: number;
   assistantRoleNodes: number;
+  dataRoleUserNodes: number;
+  dataRoleAssistantNodes: number;
+  dataMessageAuthorUserNodes: number;
+  dataMessageAuthorAssistantNodes: number;
+  userMessageBubbleNodes: number;
+  assistantConversationRoleNodes: number;
+  turnKeyNodes: number;
   turnIdNodes: number;
   messageIdNodes: number;
   conversationTurnTestIds: number;
@@ -120,6 +127,13 @@ export function collectChatGptLiveQaDomEvidence(
     articleTurns: count(root, 'article[data-turn]'),
     userRoleNodes: count(root, '[data-message-author-role="user"]'),
     assistantRoleNodes: count(root, '[data-message-author-role="assistant"]'),
+    dataRoleUserNodes: count(root, '[data-role="user"]'),
+    dataRoleAssistantNodes: count(root, '[data-role="assistant"]'),
+    dataMessageAuthorUserNodes: count(root, '[data-message-author="user"]'),
+    dataMessageAuthorAssistantNodes: count(root, '[data-message-author="assistant"]'),
+    userMessageBubbleNodes: count(root, '[data-user-message-bubble]'),
+    assistantConversationRoleNodes: count(root, '[data-conversation-role="assistant"]'),
+    turnKeyNodes: count(root, '[data-turn-key]'),
     turnIdNodes: count(root, '[data-turn-id]'),
     messageIdNodes: count(root, '[data-message-id]'),
     conversationTurnTestIds: count(root, '[data-testid^="conversation-turn-"]'),
@@ -173,6 +187,13 @@ export function buildLiveQaReport(input: {
         articleTurns: input.dom.selectors.articleTurns,
         userRoleNodes: input.dom.selectors.userRoleNodes,
         assistantRoleNodes: input.dom.selectors.assistantRoleNodes,
+        dataRoleUserNodes: input.dom.selectors.dataRoleUserNodes,
+        dataRoleAssistantNodes: input.dom.selectors.dataRoleAssistantNodes,
+        dataMessageAuthorUserNodes: input.dom.selectors.dataMessageAuthorUserNodes,
+        dataMessageAuthorAssistantNodes: input.dom.selectors.dataMessageAuthorAssistantNodes,
+        userMessageBubbleNodes: input.dom.selectors.userMessageBubbleNodes,
+        assistantConversationRoleNodes: input.dom.selectors.assistantConversationRoleNodes,
+        turnKeyNodes: input.dom.selectors.turnKeyNodes,
         turnIdNodes: input.dom.selectors.turnIdNodes,
         messageIdNodes: input.dom.selectors.messageIdNodes,
         conversationTurnTestIds: input.dom.selectors.conversationTurnTestIds,
