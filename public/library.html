@@ -73,29 +73,54 @@
             <p id="meta">Choose a conversation to read it.</p>
           </div>
 
-          <div class="action-block">
-            <button id="download-md" class="button primary topbar-primary-action" type="button" disabled>Export</button>
+          <div class="action-block conversation-action-block">
+            <div class="conversation-toolbar" role="toolbar" aria-label="Conversation actions">
+              <button id="favorite-chat" class="conversation-action" type="button" disabled aria-pressed="false" title="Add to favorites">
+                <span class="conversation-action-icon" aria-hidden="true">☆</span>
+                <span>Favorite</span>
+              </button>
+              <button id="download-md" class="conversation-action primary" type="button" disabled title="Export this conversation">
+                <span class="conversation-action-icon" aria-hidden="true">↓</span>
+                <span>Export</span>
+              </button>
+              <button id="share-chat" class="conversation-action" type="button" disabled title="Share the original conversation link">
+                <span class="conversation-action-icon" aria-hidden="true">↗</span>
+                <span>Share</span>
+              </button>
+              <button id="organize-chat" class="conversation-action" type="button" disabled aria-controls="organizer-panel" aria-expanded="false" title="Organize this conversation">
+                <span class="conversation-action-icon" aria-hidden="true">▤</span>
+                <span>Organize</span>
+              </button>
+              <button id="pin-chat" class="conversation-action" type="button" disabled aria-pressed="false" title="Pin this conversation">
+                <span class="conversation-action-icon" aria-hidden="true">⌖</span>
+                <span>Pin</span>
+              </button>
 
-            <details class="action-menu">
-              <summary class="button action-menu-trigger" aria-label="More conversation actions">•••</summary>
-              <div class="action-menu-panel">
-                <div class="action-menu-heading">Conversation</div>
-                <div class="actions" aria-label="Conversation actions">
-                  <button id="rename-chat" class="menu-action" type="button" disabled>Rename</button>
-                  <button id="archive-chat" class="menu-action" type="button" disabled>Archive</button>
-                  <button id="download-json" class="menu-action" type="button" disabled>Export JSON</button>
-                  <button id="import-json" class="menu-action" type="button" disabled>Restore backup</button>
-                  <button id="delete-chat" class="menu-action danger" type="button" disabled>Delete this copy</button>
-                  <input
-                    id="import-file"
-                    class="visually-hidden"
-                    type="file"
-                    accept="application/json,.json"
-                    aria-label="Choose a backup file to restore"
-                  >
+              <details class="action-menu">
+                <summary class="conversation-action action-menu-trigger" aria-label="More conversation actions" title="More actions">
+                  <span class="conversation-action-icon more-icon" aria-hidden="true">•••</span>
+                  <span class="visually-hidden">More</span>
+                </summary>
+                <div class="action-menu-panel">
+                  <div class="action-menu-heading">Conversation</div>
+                  <div class="actions" aria-label="More conversation actions">
+                    <button id="open-original" class="menu-action" type="button" disabled>Open original in ChatGPT ↗</button>
+                    <button id="rename-chat" class="menu-action" type="button" disabled>Rename</button>
+                    <button id="archive-chat" class="menu-action" type="button" disabled>Archive</button>
+                    <button id="download-json" class="menu-action" type="button" disabled>Export JSON</button>
+                    <button id="import-json" class="menu-action" type="button" disabled>Restore backup</button>
+                    <button id="delete-chat" class="menu-action danger" type="button" disabled>Delete this copy</button>
+                    <input
+                      id="import-file"
+                      class="visually-hidden"
+                      type="file"
+                      accept="application/json,.json"
+                      aria-label="Choose a backup file to restore"
+                    >
+                  </div>
                 </div>
-              </div>
-            </details>
+              </details>
+            </div>
 
             <p id="library-status" class="library-status" aria-live="polite"></p>
           </div>
@@ -103,7 +128,7 @@
       </header>
 
       <div class="organizer-shell">
-        <details class="organizer-panel">
+        <details id="organizer-panel" class="organizer-panel">
           <summary class="organizer-summary">
             <span>Conversation details</span>
             <span class="organizer-summary-copy">Project · folder · tags</span>
