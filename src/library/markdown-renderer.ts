@@ -497,7 +497,9 @@ function appendBlock(parent: HTMLElement, block: MarkdownBlock): void {
 
   if (block.type === 'list') {
     const list = block.ordered ? document.createElement('ol') : document.createElement('ul');
-    if (block.ordered && block.start !== 1) list.start = block.start;
+    if (block.ordered && block.start !== 1) {
+      (list as HTMLOListElement).start = block.start;
+    }
     for (const item of block.items) {
       const entry = document.createElement('li');
       appendInline(entry, item.children);
