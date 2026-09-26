@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { renderMarkdownInline, renderMarkdownToSafeHtml } from './markdown-renderer';
+import { parseMarkdown, parseMarkdownInline } from './markdown-renderer';
 
 describe('Library Markdown renderer', () => {
-  it('renders captured headings, emphasis, lists, code, quotes and tables as structured HTML', () => {
-    const html = renderMarkdownToSafeHtml(`## Plan
+  it('parses captured headings, emphasis, lists, code, quotes and tables into structured blocks', () => {
+    const blocks = parseMarkdown(`## Plan
 
 Use **bold** and *emphasis* with \`inline()\`.
 
@@ -21,43 +21,79 @@ const answer = 42;
 | --- | ---: |
 | A | 1 |`);
 
-    expect(html).toContain('<h2>Plan</h2>');
-    expect(html).toContain('<strong>bold</strong>');
-    expect(html).toContain('<em>emphasis</em>');
-    expect(html).toContain('<code class="inline-code">inline()</code>');
-    expect(html).toContain('<ul><li>First</li><li>Second<ul><li>Nested</li></ul></li></ul>');
-    expect(html).toContain('<div class="code-block">');
-    expect(html).toContain('<code class="language-ts">const answer = 42;</code>');
-    expect(html).toContain('<blockquote><p>Quoted line</p></blockquote>');
-    expect(html).toContain('<table>');
-    expect(html).toContain('<th class="align-left">Name</th>');
-    expect(html).toContain('<td class="align-right">1</td>');
+    expect(blocks[0]).toMatchObject({ type: 'heading', level: 2 });
+    expect(blocks[1]).toMatchObject({
+      type: 'paragraph',
+      children: expect.arrayContaining([
+        expect.objectContaining({ type: 'strong' }),
+        expect.objectContaining({ type: 'emphasis' }),
+        expect.objectContaining({ type: 'code', value: 'inline()' })
+      ])
+    });
+    expect(blocks[2]).toMatchObject({
+      type: 'list',
+      ordered: false,
+      items: [
+        expect.objectContaining({ nested: [] }),
+        expect.objectContaining({
+          nested: [expect.objectContaining({ type: 'list', ordered: false })]
+        })
+      ]
+    });
+    expect(blocks[3]).toMatchObject({
+      type: 'code-block',
+      language: 'ts',
+      value: 'const answer = 42;'
+    });
+    expect(blocks[4]).toMatchObject({ type: 'blockquote' });
+    expect(blocks[5]).toMatchObject({
+      type: 'table',
+      alignments: ['left', 'right']
+    });
   });
 
-  it('escapes raw HTML and refuses executable or relative Markdown links', () => {
-    const html = renderMarkdownToSafeHtml(`<script>alert("x")</script>
+  it('keeps raw HTML as text and refuses executable or relative Markdown links', () => {
+    const blocks = parseMarkdown(`<script>alert("x")</script>
 
 [Safe](https://example.com/docs)
 [Unsafe](javascript:alert(1))
 [Relative](/private)`);
 
-    expect(html).toContain('&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;');
-    expect(html).toContain('href="https://example.com/docs"');
-    expect(html).not.toContain('href="javascript:');
-    expect(html).not.toContain('href="/private"');
-    expect(html).not.toContain('<script>');
+    expect(blocks[0]).toMatchObject({
+      type: 'paragraph',
+      children: [{ type: 'text', value: '<script>alert("x")</script>' }]
+    });
+
+    const safe = blocks[1];
+    expect(safe).toMatchObject({
+      type: 'paragraph',
+      children: [expect.objectContaining({ type: 'link', target: 'https://example.com/docs' })]
+    });
+
+    const serialized = JSON.stringify(blocks);
+    expect(serialized).not.toContain('"target":"javascript:');
+    expect(serialized).not.toContain('"target":"/private"');
   });
 
   it('restores escaped Markdown punctuation as literal text instead of formatting it', () => {
-    expect(renderMarkdownInline('\\# literal \\*stars\\* \\[brackets\\]')).toBe(
-      '# literal *stars* [brackets]'
-    );
+    expect(parseMarkdownInline('\\# literal \\*stars\\* \\[brackets\\]')).toEqual([
+      { type: 'text', value: '# literal *stars* [brackets]' }
+    ]);
   });
 
-  it('renders image Markdown as a privacy-safe text placeholder rather than a remote image request', () => {
-    const html = renderMarkdownToSafeHtml('![Generated chart](https://example.com/private.png)');
-    expect(html).toContain('Image: Generated chart');
-    expect(html).not.toContain('<img');
-    expect(html).not.toContain('private.png');
+  it('turns image Markdown into a privacy-safe placeholder without retaining the remote source', () => {
+    const blocks = parseMarkdown('![Generated chart](https://example.com/private.png)');
+    expect(blocks).toMatchObject([
+      {
+        type: 'paragraph',
+        children: [
+          {
+            type: 'image-placeholder',
+            alt: [{ type: 'text', value: 'Generated chart' }]
+          }
+        ]
+      }
+    ]);
+    expect(JSON.stringify(blocks)).not.toContain('private.png');
   });
 });
