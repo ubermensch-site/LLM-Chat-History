@@ -14,7 +14,7 @@ import {
   CHATGPT_HOSTS,
   GENERATION_CONTROL_SELECTORS,
   ROLE_FALLBACK_SELECTOR,
-  TURN_SHELL_SELECTORS,
+  TURN_DISCOVERY_STRATEGIES,
   USER_CONTENT_SELECTORS
 } from './selectors';
 import {
@@ -48,6 +48,46 @@ export function normalizeVisibleModelLabel(value: string): string | null {
     : null;
 }
 
+export interface ChatGptRoleSignals {
+  dataTurn?: string | null;
+  messageAuthorRole?: string | null;
+  dataRole?: string | null;
+  messageAuthor?: string | null;
+  userMessageBubble?: boolean;
+  conversationRole?: string | null;
+}
+
+export function inferChatGptTurnRole(signals: ChatGptRoleSignals): TurnRole | null {
+  const explicitRoles = [
+    signals.dataTurn,
+    signals.messageAuthorRole,
+    signals.dataRole,
+    signals.messageAuthor,
+    signals.conversationRole
+  ];
+
+  for (const value of explicitRoles) {
+    if (value === 'user' || value === 'assistant') return value;
+  }
+
+  return signals.userMessageBubble ? 'user' : null;
+}
+
+function roleSignalsFor(element: Element): ChatGptRoleSignals {
+  return {
+    dataTurn: element.getAttribute('data-turn'),
+    messageAuthorRole: element.getAttribute('data-message-author-role'),
+    dataRole: element.getAttribute('data-role'),
+    messageAuthor: element.getAttribute('data-message-author'),
+    userMessageBubble: element.hasAttribute('data-user-message-bubble'),
+    conversationRole: element.getAttribute('data-conversation-role')
+  };
+}
+
+function directRoleFor(element: Element): TurnRole | null {
+  return inferChatGptTurnRole(roleSignalsFor(element));
+}
+
 function queryFirst(root: ParentNode, selectors: readonly string[]): Element | null {
   for (const selector of selectors) {
     const match = root.querySelector(selector);
@@ -56,18 +96,8 @@ function queryFirst(root: ParentNode, selectors: readonly string[]): Element | n
   return null;
 }
 
-function collectTurnElements(): Element[] {
-  const found = new Set<Element>();
-
-  for (const selector of TURN_SHELL_SELECTORS) {
-    document.querySelectorAll(selector).forEach((element) => found.add(element));
-  }
-
-  if (found.size === 0) {
-    document.querySelectorAll(ROLE_FALLBACK_SELECTOR).forEach((element) => found.add(element));
-  }
-
-  return [...found].sort((a, b) => {
+function sortInDocumentOrder(elements: Element[]): Element[] {
+  return elements.sort((a, b) => {
     if (a === b) return 0;
     const relation = a.compareDocumentPosition(b);
     if (relation & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
@@ -77,19 +107,77 @@ function collectTurnElements(): Element[] {
 }
 
 function roleFor(element: Element): TurnRole | null {
-  const shellRole = element.getAttribute('data-turn');
-  if (shellRole === 'user' || shellRole === 'assistant') return shellRole;
+  const direct = directRoleFor(element);
+  if (direct) return direct;
 
-  const roleNode = element.matches('[data-message-author-role]')
-    ? element
-    : element.querySelector('[data-message-author-role]');
-  const messageRole = roleNode?.getAttribute('data-message-author-role');
-  return messageRole === 'user' || messageRole === 'assistant' ? messageRole : null;
+  for (const candidate of element.querySelectorAll(ROLE_FALLBACK_SELECTOR)) {
+    const role = directRoleFor(candidate);
+    if (role) return role;
+  }
+
+  return null;
+}
+
+function dedupeNestedTurnElements(elements: Element[]): Element[] {
+  return elements.filter((candidate, index, all) => {
+    const role = roleFor(candidate);
+    if (!role) return false;
+
+    return !all.some((other, otherIndex) =>
+      otherIndex !== index &&
+      other.contains(candidate) &&
+      roleFor(other) === role
+    );
+  });
+}
+
+function collectTurnElements(): Element[] {
+  for (const strategy of TURN_DISCOVERY_STRATEGIES) {
+    const found = new Set<Element>();
+
+    for (const selector of strategy.selectors) {
+      document.querySelectorAll(selector).forEach((element) => found.add(element));
+    }
+
+    const recognized = sortInDocumentOrder(
+      [...found].filter((element) => roleFor(element) !== null)
+    );
+
+    if (recognized.length > 0) return dedupeNestedTurnElements(recognized);
+  }
+
+  return [];
 }
 
 function messageNodeFor(element: Element, role: TurnRole): Element | null {
-  if (element.getAttribute('data-message-author-role') === role) return element;
-  return element.querySelector(`[data-message-author-role="${role}"]`);
+  if (element.matches(ROLE_FALLBACK_SELECTOR) && directRoleFor(element) === role) {
+    return element;
+  }
+
+  for (const candidate of element.querySelectorAll(ROLE_FALLBACK_SELECTOR)) {
+    if (directRoleFor(candidate) === role) return candidate;
+  }
+
+  return directRoleFor(element) === role ? element : null;
+}
+
+function closestAttribute(element: Element, attribute: string): string | null {
+  const direct = element.getAttribute(attribute);
+  if (direct) return direct;
+
+  const owner = element.closest(`[${attribute}]`);
+  return owner?.getAttribute(attribute) ?? null;
+}
+
+function providerMessageIdFor(element: Element, role: TurnRole): string | null {
+  const messageNode = messageNodeFor(element, role);
+  if (!messageNode) return null;
+
+  return (
+    messageNode.getAttribute('data-message-id') ??
+    messageNode.querySelector('[data-message-id]')?.getAttribute('data-message-id') ??
+    null
+  );
 }
 
 function assistantAnswerNodeFor(element: Element): Element | null {
@@ -267,10 +355,10 @@ export class ChatGptAdapter implements ProviderAdapter {
       const role = roleFor(element);
       if (!role) return;
 
-      const messageNode = messageNodeFor(element, role);
-      const providerMessageId = messageNode?.getAttribute('data-message-id') ?? null;
+      const providerMessageId = providerMessageIdFor(element, role);
       const providerTurnId =
-        element.getAttribute('data-turn-id') ??
+        closestAttribute(element, 'data-turn-id') ??
+        closestAttribute(element, 'data-turn-key') ??
         providerMessageId ??
         element.getAttribute('data-testid') ??
         `dom:${role}:${index}`;
@@ -323,9 +411,10 @@ export class ChatGptAdapter implements ProviderAdapter {
       const missingStableIds = turns.some((element, index) => {
         const role = roleFor(element);
         if (!role) return false;
-        const messageNode = messageNodeFor(element, role);
-        return !element.getAttribute('data-turn-id') &&
-          !messageNode?.getAttribute('data-message-id') &&
+        const providerMessageId = providerMessageIdFor(element, role);
+        return !closestAttribute(element, 'data-turn-id') &&
+          !closestAttribute(element, 'data-turn-key') &&
+          !providerMessageId &&
           !element.getAttribute('data-testid') &&
           index >= 0;
       });
