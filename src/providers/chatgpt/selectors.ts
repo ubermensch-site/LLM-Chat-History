@@ -21,11 +21,12 @@ export const TURN_DISCOVERY_STRATEGIES = [
 
 export const ROLE_FALLBACK_SELECTOR = ROLE_FALLBACK_SELECTORS.join(', ');
 
+export const KEYED_TURN_SELECTOR = '[data-turn-key]';
+
 export const ASSISTANT_CONTENT_SELECTORS = [
   '.markdown',
   '.prose',
-  '[class*="markdown"]',
-  '[data-conversation-role="assistant"]'
+  '[class*="markdown"]'
 ] as const;
 
 export const USER_CONTENT_SELECTORS = [
