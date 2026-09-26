@@ -1,9 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "LLM Chat History",
+  "name": "AI Chat History",
   "version": "0.1.0",
-  "description": "Local-first recording and organization for LLM conversations.",
-  "permissions": ["storage"],
+  "description": "Local-first recording, search and organization for AI conversations.",
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://chat.openai.com/*"
@@ -20,11 +22,13 @@
         "https://chatgpt.com/*",
         "https://chat.openai.com/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
   "action": {
-    "default_title": "LLM Chat History"
+    "default_title": "AI Chat History"
   }
 }
