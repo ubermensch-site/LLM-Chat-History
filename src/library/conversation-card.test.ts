@@ -99,7 +99,10 @@ describe('conversation card presentation', () => {
     expect(conversationStatusLabel(conversation({ recordingState: 'stopped' }))).toBeNull();
   });
 
-  it('uses the product-facing provider name', () => {
+  it('uses product-facing provider names', () => {
     expect(providerDisplayName('chatgpt')).toBe('ChatGPT');
+    expect(providerDisplayName('claude' as ArchiveConversation['providerId'])).toBe('Claude');
+    expect(providerDisplayName('gemini' as ArchiveConversation['providerId'])).toBe('Gemini');
+    expect(providerDisplayName('grok' as ArchiveConversation['providerId'])).toBe('Grok');
   });
 });
